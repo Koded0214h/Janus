@@ -1,0 +1,12 @@
+[package]
+name = "janus-protocol"
+version = "0.1.0"
+authors = ["Janus Team"]
+edition = "2024"
+
+[addresses]
+janus = "0x0"
+shared = "0x1"
+
+[dependencies]
+Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "testnet" }
