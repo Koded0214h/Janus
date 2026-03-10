@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_simplejwt',
     'corsheaders',
+    'drf_spectacular',
     
     # Local apps
     'users',
@@ -148,6 +149,7 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
 
 # JWT Settings
@@ -179,3 +181,11 @@ CELERY_TIMEZONE = 'UTC'
 # AI service
 GOOGLE_API_KEY=os.getenv("GOOGLE_API_KEY")
 ANTHROPIC_API_KEY=os.getenv("ANTHROPIC_API_KEY")
+
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Janus Protocol API',
+    'DESCRIPTION': 'Janus: Your Secure Digital Assistant',
+    'VERSION': '1.0.0',
+    # OTHER SETTINGS
+}

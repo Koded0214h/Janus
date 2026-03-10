@@ -1,6 +1,6 @@
 module janus_core::policy {
-    // These are now auto-imported, but we'll keep only what's unique
-    // Removed duplicate 'use' lines
+    // These are now part of the default "prelude" in Sui Move 2024
+    // so we don't need to explicitly 'use' UID or TxContext anymore.
 
     // === Errors ===
     const ENotAuthorized: u64 = 0;
@@ -10,30 +10,32 @@ module janus_core::policy {
     public struct TreasuryPolicy has key, store {
         id: UID,
         owner: address,
+        agent_address: address, 
         max_spend_limit: u64,
         approved_protocols: vector<address>,
     }
 
-    // 1. Create a new policy
-    public fun create_policy(limit: u64, ctx: &mut TxContext) {
+    public fun create_policy(agent: address, limit: u64, ctx: &mut TxContext) {
         let policy = TreasuryPolicy {
             id: object::new(ctx),
-            owner: ctx.sender(), // Modern syntax: .sender() instead of tx_context::sender(ctx)
+            owner: ctx.sender(),
+            agent_address: agent,
             max_spend_limit: limit,
             approved_protocols: vector::empty<address>(),
         };
         transfer::share_object(policy);
     }
 
-    // 2. Add an approved protocol
-    public fun add_protocol(policy: &mut TreasuryPolicy, protocol: address, ctx: &mut TxContext) {
+    public fun add_protocol(policy: &mut TreasuryPolicy, protocol: address, ctx: &TxContext) {
         assert!(ctx.sender() == policy.owner, ENotAuthorized);
-        policy.approved_protocols.push_back(protocol);
+        if (!vector::contains(&policy.approved_protocols, &protocol)) {
+            vector::push_back(&mut policy.approved_protocols, protocol);
+        };
     }
 
-    // 3. The check called by Ika/Sentry
-    public fun check_compliance(policy: &TreasuryPolicy, amount: u64, target: address) {
+    public fun check_compliance(policy: &TreasuryPolicy, amount: u64, target: address, ctx: &TxContext) {
+        assert!(ctx.sender() == policy.agent_address, ENotAuthorized);
         assert!(amount <= policy.max_spend_limit, EOverSpendLimit);
-        assert!(policy.approved_protocols.contains(&target), ENotAuthorized);
+        assert!(vector::contains(&policy.approved_protocols, &target), ENotAuthorized);
     }
 }
