@@ -11,7 +11,7 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "@ika.xyz/sdk": "^0.3.1",
+    "@ika.xyz/sdk": "^0.2.3",
     "@mysten/sui": "^1.21.1",
     "express": "^5.2.1"
   }
