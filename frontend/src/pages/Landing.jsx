@@ -1,5 +1,66 @@
 import { Link } from 'react-router-dom';
 import React from 'react';
+import RadialOrbitalTimeline from '@/components/ui/RadialOrbitalTimeline';
+import FooterSection from '@/components/ui/Footer';
+import { Brain, Shield, BadgeCheck, Cpu, Lock, Zap } from 'lucide-react';
+
+const timelineData = [
+  {
+    id: 1,
+    title: "AI Assistant",
+    date: "The Brain",
+    content: "Neural execution engine translating intent into atomic transactions with high fidelity.",
+    category: "Core",
+    icon: Brain,
+    relatedIds: [2, 3],
+    status: "completed",
+    energy: 100,
+  },
+  {
+    id: 2,
+    title: "Sharded Sentry",
+    date: "The Bodyguard",
+    content: "Distributed multi-sig validation protecting every outbound flow across the agentic web.",
+    category: "Security",
+    icon: Shield,
+    relatedIds: [1, 3],
+    status: "completed",
+    energy: 95,
+  },
+  {
+    id: 3,
+    title: "ZK-Passport",
+    date: "The ID",
+    content: "Privacy-preserving compliance through zero-knowledge proofs, securing institutional footprints.",
+    category: "Identity",
+    icon: BadgeCheck,
+    relatedIds: [1, 2],
+    status: "completed",
+    energy: 90,
+  },
+  {
+    id: 4,
+    title: "Atomic Multi-Sig",
+    date: "The Protocol",
+    content: "Cryptographically sharded approval mechanism for high-stakes autonomous finance.",
+    category: "Protocol",
+    icon: Lock,
+    relatedIds: [2],
+    status: "in-progress",
+    energy: 85,
+  },
+  {
+    id: 5,
+    title: "Inference Engine",
+    date: "The Edge",
+    content: "Ultra-low latency inference for real-time transaction validation and execution.",
+    category: "Execution",
+    icon: Cpu,
+    relatedIds: [1, 4],
+    status: "in-progress",
+    energy: 80,
+  },
+];
 
 const Landing = () => {
   return (
@@ -78,51 +139,14 @@ const Landing = () => {
         </section>
 
         {/* Features Section: RadialOrbitalTimeline */}
-        <section className="py-24 bg-surface-container-low relative">
-          <div className="max-w-7xl mx-auto px-6 text-center mb-20">
+        <section className="py-24 bg-surface-container-low relative overflow-hidden">
+          <div className="max-w-7xl mx-auto px-6 text-center mb-12 relative z-10">
             <h2 className="text-xs font-mono uppercase tracking-[0.4em] text-primary mb-4">The Core Innovation</h2>
             <h3 className="text-4xl md:text-5xl font-black text-white tracking-tighter">Janus changes the game with three breakthrough layers</h3>
           </div>
-          <div className="max-w-5xl mx-auto px-6 relative py-20 flex flex-col md:flex-row items-center justify-between gap-12">
-            {/* SVG Connector Lines for Layout */}
-            <svg className="absolute inset-0 w-full h-full hidden md:block pointer-events-none" viewBox="0 0 800 400">
-              <path d="M150,200 L400,200 M400,200 L650,200" fill="none" stroke="#3c4a43" strokeDasharray="4 4" strokeWidth="1"></path>
-            </svg>
-            {/* AI Assistant (The Brain) */}
-            <div className="relative z-10 w-full md:w-1/3 flex flex-col items-center text-center group">
-              <div className="w-20 h-20 bg-surface-container-highest rounded-full flex items-center justify-center border border-outline-variant/20 mb-6 group-hover:border-primary/50 transition-all duration-500">
-                <span className="material-symbols-outlined text-primary text-3xl">smart_toy</span>
-              </div>
-              <h4 className="text-xl font-bold text-white mb-2">AI Assistant</h4>
-              <span className="text-xs font-mono text-primary uppercase tracking-widest mb-4">(The Brain)</span>
-              <p className="text-sm text-on-surface-variant leading-relaxed">Neural execution engine translating intent into atomic transactions.</p>
-            </div>
-            {/* Central Orb */}
-            <div className="relative z-20 w-32 h-32 bg-primary/10 rounded-full flex items-center justify-center border border-primary/40 shadow-[0_0_50px_rgba(0,208,156,0.2)]">
-              <div className="w-20 h-20 bg-primary/20 rounded-full flex items-center justify-center animate-pulse">
-                <span className="material-symbols-outlined text-primary text-4xl">hub</span>
-              </div>
-            </div>
-            {/* Sharded Sentry (The Bodyguard) */}
-            <div className="relative z-10 w-full md:w-1/3 flex flex-col items-center text-center group">
-              <div className="w-20 h-20 bg-surface-container-highest rounded-full flex items-center justify-center border border-outline-variant/20 mb-6 group-hover:border-primary/50 transition-all duration-500">
-                <span className="material-symbols-outlined text-primary text-3xl">shield</span>
-              </div>
-              <h4 className="text-xl font-bold text-white mb-2">Sharded Sentry</h4>
-              <span className="text-xs font-mono text-primary uppercase tracking-widest mb-4">(The Bodyguard)</span>
-              <p className="text-sm text-on-surface-variant leading-relaxed">Distributed multi-sig validation protecting every outbound flow.</p>
-            </div>
-          </div>
-          {/* Third Node below center for Asymmetry */}
-          <div className="max-w-5xl mx-auto px-6 flex justify-center mt-12">
-            <div className="relative z-10 w-full md:w-1/3 flex flex-col items-center text-center group">
-              <div className="w-20 h-20 bg-surface-container-highest rounded-full flex items-center justify-center border border-outline-variant/20 mb-6 group-hover:border-primary/50 transition-all duration-500">
-                <span className="material-symbols-outlined text-primary text-3xl">badge</span>
-              </div>
-              <h4 className="text-xl font-bold text-white mb-2">ZK-Passport</h4>
-              <span className="text-xs font-mono text-primary uppercase tracking-widest mb-4">(The ID)</span>
-              <p className="text-sm text-on-surface-variant leading-relaxed">Privacy-preserving compliance through zero-knowledge proofs.</p>
-            </div>
+          
+          <div className="max-w-7xl mx-auto h-[600px] relative">
+            <RadialOrbitalTimeline timelineData={timelineData} />
           </div>
         </section>
 
@@ -216,25 +240,7 @@ const Landing = () => {
       </main>
 
       {/* Footer Shell */}
-      <footer className="bg-[#121315] w-full py-12 border-t border-[#3c4a43]/15">
-        <div className="flex flex-col md:flex-row justify-between items-center max-w-7xl mx-auto px-8 gap-8">
-          <div className="flex flex-col items-center md:items-start gap-4">
-            <div className="text-lg font-bold text-[#00D09C]">JANUS</div>
-            <p className="font-['JetBrains_Mono'] text-[10px] uppercase tracking-widest text-[#bacac1]">© 2024 Janus Protocol. Encrypted by Design.</p>
-          </div>
-          <div className="flex flex-wrap justify-center gap-8 font-['JetBrains_Mono'] text-xs uppercase tracking-widest">
-            <a className="text-[#bacac1] hover:text-[#00D09C] transition-all hover:-translate-y-1" href="#">Twitter</a>
-            <a className="text-[#bacac1] hover:text-[#00D09C] transition-all hover:-translate-y-1" href="#">GitHub</a>
-            <a className="text-[#bacac1] hover:text-[#00D09C] transition-all hover:-translate-y-1" href="#">Discord</a>
-            <a className="text-[#bacac1] hover:text-[#00D09C] transition-all hover:-translate-y-1" href="#">Docs</a>
-            <a className="text-[#bacac1] hover:text-[#00D09C] transition-all hover:-translate-y-1" href="#">Privacy</a>
-            <a className="text-[#bacac1] hover:text-[#00D09C] transition-all hover:-translate-y-1" href="#">Security</a>
-          </div>
-        </div>
-        <div className="max-w-7xl mx-auto px-8 mt-12 text-center">
-          <p className="text-[10px] text-on-surface-variant/40 font-mono tracking-widest uppercase">Janus Protocol – The Secure Transaction Layer for the Agentic Web</p>
-        </div>
-      </footer>
+      <FooterSection />
     </div>
   );
 };
