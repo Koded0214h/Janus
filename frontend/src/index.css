@@ -1,0 +1,122 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom styles from the original HTML */
+body {
+  background-color: #121315;
+  overflow-x: hidden;
+}
+
+.infinite-grid {
+  background-image: 
+    linear-gradient(to right, rgba(60, 74, 67, 0.1) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(60, 74, 67, 0.1) 1px, transparent 1px);
+  background-size: 40px 40px;
+  mask-image: radial-gradient(circle at center, black, transparent 80%);
+}
+
+.soft-spring {
+  transition-timing-function: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.glass-panel {
+  backdrop-filter: blur(12px);
+  background: rgba(27, 28, 30, 0.8);
+}
+
+.tech-glow:hover {
+  box-shadow: 0 0 15px rgba(0, 208, 156, 0.2);
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Additional keyframes for the hero spinner (if not using Tailwind animations) */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Make sure the custom animations work with Tailwind's animate-* utilities */
+.animate-\[spin_10s_linear_infinite\] {
+  animation: spin 10s linear infinite;
+}
+.animate-\[spin_5s_linear_infinite_reverse\] {
+  animation: spin 5s linear infinite reverse;
+}
+
+
+/* Custom scrollbar (as used in the dashboard) */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #3c4a43;
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #343537;
+  border-radius: 10px;
+}
+
+.glass-panel {
+  background: rgba(27, 28, 30, 0.8);
+  backdrop-filter: blur(12px);
+}
+
+.holographic-glow {
+  background: linear-gradient(135deg, #5D5FEF 0%, #44edb7 100%);
+  padding: 1px;
+}
+
+.spring-hover {
+  transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.spring-hover:hover {
+  transform: scale(1.02);
+}
+
+.active-glow {
+  box-shadow: 0 0 15px rgba(68, 237, 183, 0.1);
+}
+
+.glass-button {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(4px);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.glass-button:hover {
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 0 15px rgba(0, 208, 156, 0.15);
+}
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #0d0e10;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #3c4a43;
+  border-radius: 10px;
+}
