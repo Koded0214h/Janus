@@ -11,136 +11,200 @@ Determine the default path for components and styles.
 If default path for components is not /components/ui, provide instructions on why it's important to create this folder
 Copy-paste this component to /components/ui folder:
 ```tsx
-footer.tsx
+floating-action-menu.tsx
 
-import Link from 'next/link'
+"use client";
 
-// Import generic icons from lucide-react
-import {
-    Globe, // Could represent a website or general online presence
-    Share2, // Could represent sharing/social media in general
-    MessageCircle, // Could represent communication/social
-    Link as LinkIcon, // Renamed to avoid conflict with Next.js Link
-    Send, // Could represent sending a message, a bit like a paper plane for social
-    Feather, // Could be an abstract representation for a 'feed' or 'post'
-} from 'lucide-react'
+import React, { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Button } from "@/components/ui/button";
+import { Plus } from "lucide-react";
+import { cn } from "@/lib/utils";
 
-const links = [
-    {
-        title: 'Features',
-        href: '#',
-    },
-    {
-        title: 'Solution',
-        href: '#',
-    },
-    {
-        title: 'Customers',
-        href: '#',
-    },
-    {
-        title: 'Pricing',
-        href: '#',
-    },
-    {
-        title: 'Help',
-        href: '#',
-    },
-    {
-        title: 'About',
-        href: '#',
-    },
-]
+type FloatingActionMenuProps = {
+options: {
+  label: string;
+  onClick: () => void;
+  Icon?: React.ReactNode;
+}[];
+className?: string;
+};
 
-export default function FooterSection() {
+const FloatingActionMenu = ({
+options,
+className,
+}: FloatingActionMenuProps) => {
+const [isOpen, setIsOpen] = useState(false);
+
+const toggleMenu = () => {
+  setIsOpen(!isOpen);
+};
+
+return (
+  <div className={cn("fixed bottom-8 right-8", className)}>
+    <Button
+      onClick={toggleMenu}
+      className="w-10 h-10 rounded-full bg-[#11111198] hover:bg-[#111111d1] shadow-[0_0_20px_rgba(0,0,0,0.2)] "
+    >
+      <motion.div
+        animate={{ rotate: isOpen ? 45 : 0 }}
+        transition={{
+          duration: 0.3,
+          ease: "easeInOut",
+          type: "spring",
+          stiffness: 300,
+          damping: 20,
+        }}
+      >
+        <Plus className="w-6 h-6" />
+      </motion.div>
+    </Button>
+
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          initial={{ opacity: 0, x: 10, y: 10, filter: "blur(10px)" }}
+          animate={{ opacity: 1, x: 0, y: 0, filter: "blur(0px)" }}
+          exit={{ opacity: 0, x: 10, y: 10, filter: "blur(10px)" }}
+          transition={{
+            duration: 0.6,
+            type: "spring",
+            stiffness: 300,
+            damping: 20,
+            delay: 0.1,
+          }}
+          className="absolute bottom-10 right-0 mb-2"
+        >
+          <div className="flex flex-col items-end gap-2">
+            {options.map((option, index) => (
+              <motion.div
+                key={index}
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                transition={{
+                  duration: 0.3,
+                  delay: index * 0.05,
+                }}
+              >
+                <Button
+                  onClick={option.onClick}
+                  size="sm"
+                  className="flex items-center gap-2 bg-[#11111198] hover:bg-[#111111d1] shadow-[0_0_20px_rgba(0,0,0,0.2)] border-none rounded-xl backdrop-blur-sm"
+                >
+                  {option.Icon}
+                  <span>{option.label}</span>
+                </Button>
+              </motion.div>
+            ))}
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  </div>
+);
+};
+
+export default FloatingActionMenu;
+
+
+demo.tsx
+import FloatingActionMenu from "@/components/ui/floating-action-menu"
+import { Settings, User, LogOut } from "lucide-react";
+
+export const FloatingActionMenuDemo = () => {
     return (
-        <footer className="py-16 md:py-32">
-            <div className="mx-auto max-w-5xl px-6">
-                <Link
-                    href="/"
-                    aria-label="go home"
-                    className="mx-auto block size-fit">
-                </Link>
-
-                <div className="my-8 flex flex-wrap justify-center gap-6 text-sm">
-                    {links.map((link, index) => (
-                        <Link
-                            key={index}
-                            href={link.href}
-                            className="text-muted-foreground hover:text-primary block duration-150">
-                            <span>{link.title}</span>
-                        </Link>
-                    ))}
-                </div>
-                <div className="my-8 flex flex-wrap justify-center gap-6 text-sm">
-                    {/* Using generic icons for social links */}
-                    <Link
-                        href="#"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        aria-label="Social Link 1" // Generic label
-                        className="text-muted-foreground hover:text-primary block">
-                        <Share2 className="size-6" /> {/* Generic "Share" icon */}
-                    </Link>
-                    <Link
-                        href="#"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        aria-label="Social Link 2"
-                        className="text-muted-foreground hover:text-primary block">
-                        <MessageCircle className="size-6" /> {/* Generic "Message" icon */}
-                    </Link>
-                    <Link
-                        href="#"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        aria-label="Social Link 3"
-                        className="text-muted-foreground hover:text-primary block">
-                        <LinkIcon className="size-6" /> {/* Generic "Link" icon */}
-                    </Link>
-                    <Link
-                        href="#"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        aria-label="Social Link 4"
-                        className="text-muted-foreground hover:text-primary block">
-                        <Globe className="size-6" /> {/* Generic "Globe" (website/world) icon */}
-                    </Link>
-                    <Link
-                        href="#"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        aria-label="Social Link 5"
-                        className="text-muted-foreground hover:text-primary block">
-                        <Send className="size-6" /> {/* Generic "Send" icon */}
-                    </Link>
-                    <Link
-                        href="#"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        aria-label="Social Link 6"
-                        className="text-muted-foreground hover:text-primary block">
-                        <Feather className="size-6" /> {/* Generic "Feather" (post/write) icon */}
-                    </Link>
-                </div>
-                <span className="text-muted-foreground block text-center text-sm"> © {new Date().getFullYear()} Tailark, All rights reserved</span>
-            </div>
-        </footer>
+          <FloatingActionMenu
+          className="relative"
+          options={[
+            {
+              label: "Account",
+              Icon: <User className="w-4 h-4" />,
+              onClick: () => console.log("Account clicked"),
+            },
+            {
+              label: "Settings",
+              Icon: <Settings className="w-4 h-4" />,
+              onClick: () => console.log("Settings clicked"),
+            },
+            {
+              label: "Logout",
+              Icon: <LogOut className="w-4 h-4" />,
+              onClick: () => console.log("Logout clicked"),
+            },
+          ]}
+        />
     )
 }
 
-demo.tsx
-import FooterSection from "@/components/ui/footer";
+export { FloatingActionMenuDemo }
+```
 
-export default function DemoOne() {
-  return <FooterSection />;
+Copy-paste these files for dependencies:
+```tsx
+shadcn/button
+import * as React from "react"
+import { Slot } from "@radix-ui/react-slot"
+import { cva, type VariantProps } from "class-variance-authority"
+
+import { cn } from "@/lib/utils"
+
+const buttonVariants = cva(
+  "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
+  {
+    variants: {
+      variant: {
+        default: "bg-primary text-primary-foreground hover:bg-primary/90",
+        destructive:
+          "bg-destructive text-destructive-foreground hover:bg-destructive/90",
+        outline:
+          "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
+        secondary:
+          "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+        ghost: "hover:bg-accent hover:text-accent-foreground",
+        link: "text-primary underline-offset-4 hover:underline",
+      },
+      size: {
+        default: "h-10 px-4 py-2",
+        sm: "h-9 rounded-md px-3",
+        lg: "h-11 rounded-md px-8",
+        icon: "h-10 w-10",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+      size: "default",
+    },
+  },
+)
+
+export interface ButtonProps
+  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
+    VariantProps<typeof buttonVariants> {
+  asChild?: boolean
 }
+
+const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ className, variant, size, asChild = false, ...props }, ref) => {
+    const Comp = asChild ? Slot : "button"
+    return (
+      <Comp
+        className={cn(buttonVariants({ variant, size, className }))}
+        ref={ref}
+        {...props}
+      />
+    )
+  },
+)
+Button.displayName = "Button"
+
+export { Button, buttonVariants }
 
 ```
 
 Install NPM dependencies:
 ```bash
-next, lucide-react
+lucide-react, framer-motion, @radix-ui/react-slot, class-variance-authority
 ```
 
 Implementation Guidelines

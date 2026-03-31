@@ -1,4 +1,7 @@
 import React, { useState } from "react";
+import { SidebarProvider, SidebarInset } from "@/components/ui/Sidebar";
+import { JanusSidebar } from "@/components/JanusSidebar";
+import { JanusHeader } from "@/components/JanusHeader";
 
 const Policies = () => {
   // State for tabs
@@ -22,149 +25,16 @@ const Policies = () => {
   const [priority, setPriority] = useState("Medium (12s)");
 
   return (
-    <div className="bg-background text-on-surface font-body overflow-x-hidden selection:bg-primary/30">
-      {/* SideNavBar */}
-      <aside className="hidden md:flex flex-col h-screen w-64 fixed left-0 top-0 z-50 bg-background border-r border-outline-variant/15 p-4">
-        <div className="flex flex-col gap-1 mb-8 px-2">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-primary-container rounded-sm flex items-center justify-center">
-              <span
-                className="material-symbols-outlined text-on-primary-container"
-                style={{ fontVariationSettings: "'FILL' 1" }}
-              >
-                security
-              </span>
-            </div>
-            <div>
-              <h1 className="font-black text-primary text-lg leading-none uppercase tracking-tighter">
-                Janus Protocol
-              </h1>
-              <p className="font-['JetBrains_Mono'] text-[10px] text-on-surface-variant uppercase tracking-widest mt-1">
-                v1.0.4-encrypted
-              </p>
-            </div>
-          </div>
-        </div>
-        <nav className="flex-1 flex flex-col gap-2">
-          <a
-            href="#"
-            className="flex items-center gap-3 px-3 py-2.5 rounded-sm transition-all duration-300 group text-on-surface-variant opacity-70 hover:bg-surface-container-low hover:opacity-100"
-          >
-            <span className="material-symbols-outlined text-xl">dashboard</span>
-            <span className="font-['JetBrains_Mono'] text-sm uppercase tracking-widest">
-              Dashboard
-            </span>
-          </a>
-          <a
-            href="#"
-            className="flex items-center gap-3 px-3 py-2.5 rounded-sm transition-all duration-300 group text-on-surface-variant opacity-70 hover:bg-surface-container-low hover:opacity-100"
-          >
-            <span className="material-symbols-outlined text-xl">smart_toy</span>
-            <span className="font-['JetBrains_Mono'] text-sm uppercase tracking-widest">
-              AI Agent
-            </span>
-          </a>
-          <a
-            href="#"
-            className="flex items-center gap-3 px-3 py-2.5 rounded-sm transition-all duration-300 group bg-surface-container text-primary shadow-[0_0_10px_rgba(0,208,156,0.2)] border-r-2 border-primary"
-          >
-            <span
-              className="material-symbols-outlined text-xl"
-              style={{ fontVariationSettings: "'FILL' 1" }}
-            >
-              policy
-            </span>
-            <span className="font-['JetBrains_Mono'] text-sm uppercase tracking-widest">
-              Policies
-            </span>
-          </a>
-          <a
-            href="#"
-            className="flex items-center gap-3 px-3 py-2.5 rounded-sm transition-all duration-300 group text-on-surface-variant opacity-70 hover:bg-surface-container-low hover:opacity-100"
-          >
-            <span className="material-symbols-outlined text-xl">history</span>
-            <span className="font-['JetBrains_Mono'] text-sm uppercase tracking-widest">
-              Activity
-            </span>
-          </a>
-          <a
-            href="#"
-            className="flex items-center gap-3 px-3 py-2.5 rounded-sm transition-all duration-300 group text-on-surface-variant opacity-70 hover:bg-surface-container-low hover:opacity-100"
-          >
-            <span className="material-symbols-outlined text-xl">security</span>
-            <span className="font-['JetBrains_Mono'] text-sm uppercase tracking-widest">
-              Security Center
-            </span>
-          </a>
-          <a
-            href="#"
-            className="flex items-center gap-3 px-3 py-2.5 rounded-sm transition-all duration-300 group text-on-surface-variant opacity-70 hover:bg-surface-container-low hover:opacity-100"
-          >
-            <span className="material-symbols-outlined text-xl">verified_user</span>
-            <span className="font-['JetBrains_Mono'] text-sm uppercase tracking-widest">
-              ZK Passport
-            </span>
-          </a>
-          <a
-            href="#"
-            className="flex items-center gap-3 px-3 py-2.5 rounded-sm transition-all duration-300 group text-on-surface-variant opacity-70 hover:bg-surface-container-low hover:opacity-100 mt-auto"
-          >
-            <span className="material-symbols-outlined text-xl">settings</span>
-            <span className="font-['JetBrains_Mono'] text-sm uppercase tracking-widest">
-              Settings
-            </span>
-          </a>
-        </nav>
-        <div className="mt-6 pt-6 border-t border-outline-variant/15">
-          <button className="w-full bg-gradient-to-br from-primary to-primary-container text-on-primary px-4 py-3 rounded-sm font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-transform active:scale-95">
-            <span className="material-symbols-outlined text-lg">add_circle</span>
-            New Intent
-          </button>
-        </div>
-      </aside>
+    <SidebarProvider defaultOpen={false}>
+      <JanusSidebar />
+      <SidebarInset>
+        <div className="bg-background text-on-surface font-body overflow-x-hidden selection:bg-primary/30 min-h-screen">
+          <JanusHeader title="Policies" />
 
-      {/* Main Content Area */}
-      <main className="md:ml-64 min-h-screen">
-        {/* TopAppBar */}
-        <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-xl flex items-center justify-between px-6 py-3 w-full border-b border-outline-variant/15 shadow-[0_0_15px_rgba(0,208,156,0.1)]">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 bg-surface-container-low px-3 py-1.5 rounded-sm border border-outline-variant/10">
-              <span className="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
-              <span className="font-mono text-[10px] uppercase tracking-tighter text-on-surface-variant">
-                Mainnet Online
-              </span>
-            </div>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="hidden sm:flex items-center gap-4 mr-4">
-              <div className="text-right">
-                <p className="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">
-                  Total Safeguarded
-                </p>
-                <p className="font-mono text-primary text-sm font-bold">$1,240,492.12</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <button className="p-2 text-on-surface-variant hover:text-primary transition-colors">
-                <span className="material-symbols-outlined">notifications</span>
-              </button>
-              <button className="flex items-center gap-2 bg-surface-container border border-outline-variant/20 px-4 py-2 rounded-sm text-primary font-bold text-xs uppercase tracking-widest hover:bg-surface-container-high transition-all active:scale-95">
-                <span
-                  className="material-symbols-outlined text-lg"
-                  style={{ fontVariationSettings: "'FILL' 1" }}
-                >
-                  account_balance_wallet
-                </span>
-                0x44ed...db7
-              </button>
-            </div>
-          </div>
-        </header>
-
-        {/* Page Content */}
-        <div className="p-8 max-w-7xl mx-auto">
-          {/* Header Section */}
-          <div className="mb-10">
+          {/* Page Content */}
+          <div className="p-8 max-w-6xl mx-auto">
+            {/* Header Section */}
+            <div className="mb-10">
             <h2 className="text-4xl font-black tracking-tighter text-on-surface mb-2 uppercase">
               Policies
             </h2>
@@ -578,41 +448,10 @@ const Policies = () => {
             </div>
           </footer>
         </div>
-      </main>
-
-      {/* Contextual FAB (only on mobile) */}
-      <div className="fixed bottom-8 right-8 z-50 md:hidden">
-        <button className="w-14 h-14 bg-primary rounded-full flex items-center justify-center shadow-2xl text-on-primary">
-          <span className="material-symbols-outlined text-3xl">add</span>
-        </button>
       </div>
-
-      {/* Mobile Navigation Shell */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-background border-t border-outline-variant/20 flex justify-around items-center h-16 z-50 px-2">
-        <button className="flex flex-col items-center gap-1 text-on-surface-variant opacity-70">
-          <span className="material-symbols-outlined text-xl">dashboard</span>
-          <span className="text-[8px] uppercase tracking-tighter">Dash</span>
-        </button>
-        <button className="flex flex-col items-center gap-1 text-primary">
-          <span
-            className="material-symbols-outlined text-xl"
-            style={{ fontVariationSettings: "'FILL' 1" }}
-          >
-            policy
-          </span>
-          <span className="text-[8px] uppercase tracking-tighter">Policies</span>
-        </button>
-        <button className="flex flex-col items-center gap-1 text-on-surface-variant opacity-70">
-          <span className="material-symbols-outlined text-xl">smart_toy</span>
-          <span className="text-[8px] uppercase tracking-tighter">Agent</span>
-        </button>
-        <button className="flex flex-col items-center gap-1 text-on-surface-variant opacity-70">
-          <span className="material-symbols-outlined text-xl">security</span>
-          <span className="text-[8px] uppercase tracking-tighter">Vault</span>
-        </button>
-      </nav>
-    </div>
-  );
+    </SidebarInset>
+  </SidebarProvider>
+);
 };
 
 export default Policies;
