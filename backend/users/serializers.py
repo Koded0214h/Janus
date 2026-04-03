@@ -5,6 +5,7 @@ from .models import User, UserProfile, APIKey
 from cryptography.fernet import Fernet
 import secrets
 from django.conf import settings
+from django.db import models
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, min_length=8)
@@ -57,7 +58,9 @@ class UserProfileSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = UserProfile
-        fields = '__all__'
+        fields = ('id', 'email', 'wallet_address', 'first_name', 'last_name', 'phone', 'country', 'timezone', 
+                  'risk_tolerance', 'preferred_chains', 'excluded_protocols', 
+                  'max_gas_per_tx', 'recovery_address', 'created_at', 'updated_at')
         read_only_fields = ('user', 'created_at', 'updated_at')
 
 class UserSerializer(serializers.ModelSerializer):

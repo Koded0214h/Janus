@@ -1,8 +1,9 @@
-import { Link } from 'react-router-dom';
-import React from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import React, { useState } from 'react';
 import RadialOrbitalTimeline from '@/components/ui/RadialOrbitalTimeline';
 import FooterSection from '@/components/ui/Footer';
-import { Brain, Shield, BadgeCheck, Cpu, Lock, Zap } from 'lucide-react';
+import { Brain, Shield, BadgeCheck, Cpu, Lock, Zap, Loader2 } from 'lucide-react';
+import { useModal } from '@/context/ModalContext';
 
 const timelineData = [
   {
@@ -63,6 +64,68 @@ const timelineData = [
 ];
 
 const Landing = () => {
+  const { showModal } = useModal();
+  const navigate = useNavigate();
+  const [isConnecting, setIsConnecting] = useState(false);
+
+  const handleConnectWallet = async () => {
+    if (!window.ethereum) {
+      showModal("MetaMask Required", "MetaMask is not installed. Please install it to continue.", "warning");
+      return;
+    }
+
+    try {
+      setIsConnecting(true);
+      // 1. Request account access
+      const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+      const walletAddress = accounts[0];
+
+      // 2. Get nonce from backend
+      const nonceResponse = await fetch('http://localhost:8000/api/users/wallet/nonce/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wallet_address: walletAddress }),
+      });
+      const { nonce } = await nonceResponse.json();
+
+      // 3. Sign the nonce
+      const message = `Janus Auth Nonce: ${nonce}`;
+      const signature = await window.ethereum.request({
+        method: 'personal_sign',
+        params: [message, walletAddress],
+      });
+
+      // 4. Login with signature
+      const loginResponse = await fetch('http://localhost:8000/api/users/wallet/login/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          wallet_address: walletAddress,
+          signature: signature,
+        }),
+      });
+
+      if (loginResponse.ok) {
+        const data = await loginResponse.json();
+        // Store tokens
+        localStorage.setItem('access_token', data.access);
+        localStorage.setItem('refresh_token', data.refresh);
+        localStorage.setItem('user_address', walletAddress);
+        
+        // Redirect to dashboard
+        navigate('/dashboard');
+      } else {
+        const error = await loginResponse.json();
+        showModal("Login Failed", `Authentication error: ${error.error || 'Unknown error'}`, "error");
+      }
+    } catch (error) {
+      console.error("Wallet connection error:", error);
+      showModal("Connection Error", "Failed to connect wallet. Ensure MetaMask is unlocked and try again.", "error");
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
   return (
     <div className="font-body text-on-surface antialiased bg-background min-h-screen">
       {/* Top Navigation Shell */}
@@ -77,9 +140,14 @@ const Landing = () => {
             <Link to="/activity"><a className="text-[#bacac1] hover:text-[#44edb7] transition-all duration-300" href="#">Activity</a></Link>
           </div>
           <div className="flex items-center gap-4">
-            <button className="hidden lg:block px-4 py-2 text-xs font-mono uppercase tracking-widest text-[#bacac1] hover:text-[#00D09C] transition-all">View GitHub</button>
-            <button className="bg-gradient-to-br from-primary to-primary-container text-on-primary px-6 py-2 rounded-sm text-sm font-bold uppercase tracking-tight scale-95 hover:scale-100 transition-transform duration-200">
-              Launch App
+            <a href='https://github.com/Koded0214h/Janus'><button className="hidden lg:block px-4 py-2 text-xs font-mono uppercase tracking-widest text-[#bacac1] hover:text-[#00D09C] transition-all">View GitHub</button></a>
+            <button 
+              onClick={handleConnectWallet}
+              disabled={isConnecting}
+              className="bg-gradient-to-br from-primary to-primary-container text-on-primary px-6 py-2 rounded-sm text-sm font-bold uppercase tracking-tight scale-95 hover:scale-100 transition-transform duration-200 disabled:opacity-50 flex items-center gap-2"
+            >
+              {isConnecting && <Loader2 className="w-4 h-4 animate-spin" />}
+              {isConnecting ? 'Connecting...' : 'Launch App'}
             </button>
           </div>
           <div className="bg-gradient-to-b from-[#1b1c1e] to-transparent h-[1px] w-full absolute bottom-0 left-0"></div>
@@ -107,8 +175,13 @@ const Landing = () => {
                 Empower your AI agent to automate complex on-chain transactions without sacrificing custody or privacy. A high-fidelity vault for the next generation of autonomous finance.
               </p>
               <div className="flex flex-wrap gap-4 pt-4">
-                <button className="bg-gradient-to-r from-primary to-primary-container text-on-primary px-8 py-4 rounded-sm font-bold text-sm uppercase tracking-widest tech-glow soft-spring hover:scale-105">
-                  Launch App
+                <button 
+                  onClick={handleConnectWallet}
+                  disabled={isConnecting}
+                  className="bg-gradient-to-r from-primary to-primary-container text-on-primary px-8 py-4 rounded-sm font-bold text-sm uppercase tracking-widest tech-glow soft-spring hover:scale-105 disabled:opacity-50 flex items-center gap-2"
+                >
+                  {isConnecting && <Loader2 className="w-5 h-5 animate-spin" />}
+                  {isConnecting ? 'Connecting...' : 'Launch App'}
                 </button>
                 <button className="border border-outline-variant/30 text-on-surface px-8 py-4 rounded-sm font-bold text-sm uppercase tracking-widest hover:bg-surface-container-high transition-colors">
                   View GitHub
@@ -142,7 +215,7 @@ const Landing = () => {
         <section className="py-24 bg-surface-container-low relative overflow-hidden">
           <div className="max-w-7xl mx-auto px-6 text-center mb-12 relative z-10">
             <h2 className="text-xs font-mono uppercase tracking-[0.4em] text-primary mb-4">The Core Innovation</h2>
-            <h3 className="text-4xl md:text-5xl font-black text-white tracking-tighter">Janus changes the game with three breakthrough layers</h3>
+            <h3 className="text-4xl md:text-5xl font-black text-white tracking-tighter">Janus changes the game with five breakthrough layers</h3>
           </div>
           
           <div className="max-w-7xl mx-auto h-[600px] relative">

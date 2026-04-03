@@ -3,7 +3,13 @@ import { SidebarTrigger } from "@/components/ui/Sidebar";
 import { Wallet, ChevronDown, Search } from "lucide-react";
 
 export function JanusHeader({ title }) {
+  const userAddress = localStorage.getItem('user_address');
   
+  const truncateAddress = (addr) => {
+    if (!addr) return '';
+    return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+  };
+
   return (
     <header className="sticky top-0 left-0 right-0 z-40 flex items-center justify-between px-6 py-3 w-full border-b border-outline-variant/10 bg-background/80 backdrop-blur-xl shadow-[0_0_20px_rgba(0,0,0,0.2)]">
       {/* Left side: Tab Name */}
@@ -35,10 +41,12 @@ export function JanusHeader({ title }) {
           </button>
         </div>
 
-        {/* Connect Wallet Button */}
+        {/* Wallet Address / Connect Wallet Button */}
         <button className="flex items-center gap-3 bg-surface-container-lowest px-4 py-1.5 rounded-full border border-outline-variant/20 hover:border-primary/50 transition-all group shadow-sm active:scale-95">
           <Wallet className="w-4 h-4 text-primary group-hover:scale-110 transition-transform" />
-          <span className="font-mono text-sm font-bold text-on-surface">Connect Wallet</span>
+          <span className="font-mono text-sm font-bold text-on-surface">
+            {userAddress ? truncateAddress(userAddress) : "Connect Wallet"}
+          </span>
         </button>
       </div>
     </header>

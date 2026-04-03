@@ -10,6 +10,8 @@ import {
   Settings,
   PlusCircle,
   Lock,
+  BookOpen,
+  HelpCircle,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -25,7 +27,8 @@ import {
   useSidebar,
 } from '@/components/ui/Sidebar';
 
-const items = [
+// Main navigation items (excluding docs & support)
+const mainItems = [
   {
     title: 'Dashboard',
     url: '/dashboard',
@@ -33,7 +36,7 @@ const items = [
   },
   {
     title: 'AI Agent',
-    url: '#',
+    url: '/agents',
     icon: Bot,
   },
   {
@@ -63,6 +66,20 @@ const items = [
   },
 ];
 
+// Footer items (docs & support)
+const footerItems = [
+  {
+    title: 'Documentation',
+    url: '#',
+    icon: BookOpen,
+  },
+  {
+    title: 'Support',
+    url: '#',
+    icon: HelpCircle,
+  },
+];
+
 export function JanusSidebar() {
   const location = useLocation();
   const { state } = useSidebar();
@@ -86,11 +103,12 @@ export function JanusSidebar() {
           )}
         </div>
       </SidebarHeader>
+
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {items.map((item) => (
+              {mainItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     asChild
@@ -113,10 +131,30 @@ export function JanusSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+
       <SidebarFooter className={state === 'expanded' ? 'p-4' : 'p-2'}>
+        {/* Docs & Support items placed above the Connect Node button */}
+        <SidebarMenu>
+          {footerItems.map((item) => (
+            <SidebarMenuItem key={item.title}>
+              <SidebarMenuButton
+                asChild
+                tooltip={item.title}
+                className="text-on-surface-variant hover:text-white hover:bg-surface-container"
+              >
+                <Link to={item.url} className="flex items-center gap-3">
+                  <item.icon className="w-5 h-5" />
+                  <span>{item.title}</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          ))}
+        </SidebarMenu>
+
+        {/* Connect Node button (the "last icon" at the bottom) */}
         <button
           className={`
-            bg-gradient-to-br from-primary to-primary-container text-on-primary font-bold uppercase tracking-widest hover:opacity-90 transition-all active:scale-95 flex items-center justify-center gap-2
+            bg-gradient-to-br from-primary to-primary-container text-on-primary font-bold uppercase tracking-widest hover:opacity-90 transition-all active:scale-95 flex items-center justify-center gap-2 mt-2
             ${
               state === 'expanded'
                 ? 'w-full py-3 rounded-sm text-[10px]'
@@ -128,6 +166,7 @@ export function JanusSidebar() {
           {state === 'expanded' && <span>Connect Node</span>}
         </button>
       </SidebarFooter>
+
       <SidebarRail />
     </Sidebar>
   );

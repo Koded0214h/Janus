@@ -22,6 +22,11 @@ class Agent(models.Model):
     config = models.JSONField(default=dict)
     is_active = models.BooleanField(default=True)
     
+    # Ika/MPC details
+    dwallet_id = models.CharField(max_length=255, blank=True)
+    dwallet_cap_id = models.CharField(max_length=255, blank=True)
+    user_secret_key_share = models.TextField(blank=True)  # Encrypted
+    
     # Performance metrics
     total_executions = models.IntegerField(default=0)
     successful_executions = models.IntegerField(default=0)
@@ -36,6 +41,22 @@ class Agent(models.Model):
     def __str__(self):
         return f"{self.name} ({self.get_agent_type_display()}) - {self.user.email}"
     
+    def encrypt_share(self, share_list):
+        """Encrypt the user secret key share list."""
+        from cryptography.fernet import Fernet
+        import json
+        cipher = Fernet(settings.ENCRYPTION_KEY.encode())
+        self.user_secret_key_share = cipher.encrypt(json.dumps(share_list).encode()).decode()
+
+    def decrypt_share(self):
+        """Decrypt the user secret key share list."""
+        if not self.user_secret_key_share:
+            return None
+        from cryptography.fernet import Fernet
+        import json
+        cipher = Fernet(settings.ENCRYPTION_KEY.encode())
+        return json.loads(cipher.decrypt(self.user_secret_key_share.encode()).decode())
+
     class Meta:
         ordering = ['-created_at']
 
@@ -91,6 +112,7 @@ class Transaction(models.Model):
     STATUS_CHOICES = [
         ('PENDING', 'Pending'),
         ('APPROVED', 'Approved'),
+        ('SIGNED', 'Signed'),
         ('EXECUTED', 'Executed'),
         ('FAILED', 'Failed'),
         ('REJECTED', 'Rejected'),
@@ -128,6 +150,7 @@ class Transaction(models.Model):
     
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
+    signed_at = models.DateTimeField(null=True, blank=True)
     executed_at = models.DateTimeField(null=True, blank=True)
     confirmed_at = models.DateTimeField(null=True, blank=True)
     

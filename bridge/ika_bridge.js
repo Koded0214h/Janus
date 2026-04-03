@@ -177,6 +177,148 @@ app.post('/api/dkg/submit', async (req, res) => {
   }
 });
 
+// ── POST /api/sign/submit ──────────────────────────────────────────────────────
+// Handles the full signing flow (presign + user sign + network sign).
+// Body:
+// {
+//   dWalletObjectId: string,
+//   dWalletCapObjectId: string,
+//   userSecretKeyShare: number[],
+//   message: number[],
+//   curve?: number, (default 0=secp256k1)
+//   hash?: string,  (default KECCAK256)
+//   signatureAlgorithm?: string (default ECDSASecp256k1)
+// }
+app.post('/api/sign/submit', async (req, res) => {
+  const {
+    dWalletObjectId,
+    dWalletCapObjectId,
+    userSecretKeyShare,
+    message,
+    curve = 0,
+    hash = Hash.KECCAK256,
+    signatureAlgorithm = SignatureAlgorithm.ECDSASecp256k1
+  } = req.body;
+
+  const adminAddress = adminKeypair.toSuiAddress();
+
+  try {
+    console.log(`[Sign] Starting sign flow for dWallet: ${dWalletObjectId}`);
+
+    // 1. Fetch dWallet object
+    const dWallet = await ikaClient.getDWallet(dWalletObjectId);
+    if (!dWallet) throw new Error('dWallet not found');
+
+    // 2. Request Presign
+    let tx = new Transaction();
+    tx.setSender(adminAddress);
+    tx.setGasBudget(1_000_000_000);
+
+    const itx = new IkaTransaction({ ikaClient, transaction: tx });
+    const unverifiedPresignCap = itx.requestPresign({
+      dWallet,
+      signatureAlgorithm,
+    });
+
+    tx.transferObjects([unverifiedPresignCap], adminAddress);
+
+    console.log('[Sign] Executing presign request...');
+    const presignResult = await executor.executeTransaction(tx);
+    console.log('[Sign] Presign Tx Digest:', presignResult.digest);
+
+    // 3. Wait for Presign completion
+    console.log('[Sign] Waiting for CompletedPresignEvent...');
+    const presignTxResult = await suiClient.waitForTransaction({
+      digest: presignResult.digest,
+      options: { showEvents: true },
+    });
+
+    let presign = null;
+    let verifiedPresignCap = null;
+
+    for (const event of presignTxResult.events || []) {
+      if (event.type.includes('CompletedPresignEvent')) {
+        const parsed = SessionsManagerModule.DWalletSessionResultEvent(
+          CoordinatorInnerModule.PresignState,
+        ).fromBase64(event.bcs);
+        presign = parsed.event_data.result.Active;
+        verifiedPresignCap = parsed.event_data.cap_id;
+        break;
+      }
+    }
+
+    if (!presign || !verifiedPresignCap) {
+      throw new Error('Presign failed or CompletedPresignEvent not found');
+    }
+    console.log('[Sign] Presign completed. VerifiedPresignCap:', verifiedPresignCap);
+
+    // 4. Request Sign
+    tx = new Transaction();
+    tx.setSender(adminAddress);
+    tx.setGasBudget(1_000_000_000);
+
+    const itxWithTx = new IkaTransaction({ ikaClient, transaction: tx });
+
+    const messageApproval = itxWithTx.approveMessage({
+      dWalletCap: dWalletCapObjectId,
+      curve: dWallet.curve,
+      signatureAlgorithm,
+      hashScheme: hash,
+      message: new Uint8Array(message),
+    });
+
+    // itx.requestSign handles computing the local user signature too if secretShare is provided
+    await itxWithTx.requestSign({
+      dWallet,
+      messageApproval,
+      hashScheme: hash,
+      verifiedPresignCap: tx.object(verifiedPresignCap),
+      presign,
+      secretShare: new Uint8Array(userSecretKeyShare),
+      publicOutput: Uint8Array.from(dWallet.state.Active.public_output),
+      message: new Uint8Array(message),
+      signatureScheme: signatureAlgorithm,
+    });
+
+    console.log('[Sign] Executing final sign request...');
+    const signResult = await executor.executeTransaction(tx);
+    console.log('[Sign] Sign Tx Digest:', signResult.digest);
+
+    // 5. Wait for Sign completion
+    console.log('[Sign] Waiting for CompletedSignEvent...');
+    const signTxResult = await suiClient.waitForTransaction({
+      digest: signResult.digest,
+      options: { showEvents: true },
+    });
+
+    let signature = null;
+    for (const event of signTxResult.events || []) {
+      if (event.type.includes('CompletedSignEvent')) {
+        const parsed = SessionsManagerModule.DWalletSessionResultEvent(
+          CoordinatorInnerModule.SignState,
+        ).fromBase64(event.bcs);
+        signature = parsed.event_data.result.Active.signature;
+        break;
+      }
+    }
+
+    if (!signature) {
+      throw new Error('Sign failed or CompletedSignEvent not found');
+    }
+
+    console.log('[Sign] Success! Signature obtained.');
+    res.json({
+      success: true,
+      signature: Array.from(signature),
+      digest: signResult.digest,
+    });
+
+  } catch (err) {
+    console.error('[Sign] Error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ── GET /health ───────────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => res.json({
   status: 'ok', network, rpc: RPC,

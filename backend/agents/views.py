@@ -21,8 +21,11 @@ from .serializers import (
 )
 from users.models import UserProfile
 from .ai_service import ai_service  # We'll create this with Gemini+Anthropic
+from .ika_service import IkaService
 
 logger = logging.getLogger(__name__)
+
+ika_service_instance = IkaService()
 
 
 class AgentViewSet(viewsets.ModelViewSet):
@@ -38,16 +41,36 @@ class AgentViewSet(viewsets.ModelViewSet):
         return Agent.objects.filter(user=self.request.user).select_related('user')
     
     def perform_create(self, serializer):
-        """Create agent for the current user with AI model configuration."""
+        """Create agent for the current user with AI model configuration and dWallet."""
         user = self.request.user
         
         # Set default AI model if not specified
         data = serializer.validated_data.copy()
         if 'ai_model' not in data.get('config', {}):
-            data.setdefault('config', {})['ai_model'] = 'gemini-pro'
+            data.setdefault('config', {})['ai_model'] = 'gemini-2.5-flash'
         
-        # Create agent
+        # Create agent instance
         agent = serializer.save(user=user)
+        
+        # Create dWallet for the agent
+        try:
+            # For prototype, we use the user's wallet address as the seed for DKG
+            # or we could generate a new random address. 
+            # IkaService.create_dwallet expects an address.
+            user_address = user.wallet_address or "0x" + uuid.uuid4().hex
+            
+            logger.info(f"Creating dWallet for agent {agent.id} using seed address {user_address}...")
+            wallet = ika_service_instance.create_dwallet(user_address)
+            
+            agent.dwallet_id = wallet['dWalletObjectId']
+            agent.dwallet_cap_id = wallet['dWalletCapObjectId']
+            agent.encrypt_share(wallet['userSecretKeyShare'])
+            
+            logger.info(f"dWallet created: {agent.dwallet_id}")
+        except Exception as e:
+            logger.error(f"Failed to create dWallet for agent {agent.id}: {str(e)}")
+            # In a real app, we might want to fail the agent creation here
+            # or mark it as 'DKG_FAILED'
         
         # Update agent stats
         agent.last_active = timezone.now()
@@ -200,7 +223,7 @@ class AgentViewSet(viewsets.ModelViewSet):
                 'agent_name': agent.name,
                 'prompt': prompt,
                 'response': response,
-                'ai_model': agent.config.get('ai_model', 'gemini-pro')
+                'ai_model': agent.config.get('ai_model', 'gemini-2.5-flash')
             })
             
         except Exception as e:
@@ -261,7 +284,7 @@ class IntentViewSet(viewsets.ModelViewSet):
             parsed_params = ai_service.parse_natural_language_intent(
                 intent.natural_language,
                 intent.intent_type,
-                agent.config.get('ai_model', 'gemini-pro')
+                agent.config.get('ai_model', 'gemini-2.5-flash')
             )
             
             intent.parsed_parameters = parsed_params
@@ -298,6 +321,29 @@ class IntentViewSet(viewsets.ModelViewSet):
             headers=headers
         )
     
+    @action(detail=False, methods=['post'])
+    def preview_parse(self, request):
+        """
+        Preview AI parsing of an intent without saving.
+        """
+        natural_language = request.data.get('natural_language')
+        intent_type = request.data.get('intent_type', 'PORTFOLIO_REBALANCE')
+        ai_model = request.data.get('ai_model', 'gemini-2.5-flash')
+        
+        if not natural_language:
+            return Response({'error': 'natural_language is required'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        try:
+            parsed_params = ai_service.parse_natural_language_intent(
+                natural_language,
+                intent_type,
+                ai_model
+            )
+            return Response(parsed_params)
+        except Exception as e:
+            logger.error(f"Preview parsing failed: {str(e)}")
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
     @action(detail=True, methods=['post'])
     def activate(self, request, pk=None):
         """Activate an intent for execution."""
@@ -404,9 +450,40 @@ class IntentViewSet(viewsets.ModelViewSet):
                 market_context={}  # Would include real market data
             )
             
-            # Update intent
+            # Create transactions from execution plan actions
+            actions = execution_plan.get('actions', [])
+            transactions_created = []
+
+            for action_data in actions:
+                try:
+                    # Create transaction
+                    tx = Transaction.objects.create(
+                        intent=intent,
+                        agent=intent.agent,
+                        user=request.user,
+                        chain=action_data.get('chain', 'SUI'),
+                        from_address=intent.agent.dwallet_id or "0x" + uuid.uuid4().hex,
+                        to_address=action_data.get('to_address', "0x" + uuid.uuid4().hex),
+                        amount=action_data.get('amount', 1.0),
+                        token_symbol=action_data.get('to', action_data.get('token_symbol', 'SUI')),
+                        token_address=action_data.get('token_address', ''),
+                        protocol=action_data.get('protocol', ''),
+                        function_name=action_data.get('type', 'execute'),
+                        status='EXECUTED',  # For prototype, we simulate immediate execution
+                        executed_at=timezone.now(),
+                        tx_hash=f"0x{uuid.uuid4().hex}"
+                    )
+                    transactions_created.append(str(tx.id))
+
+                    # Update agent stats
+                    intent.agent.total_executions += 1
+                    intent.agent.successful_executions += 1
+                    intent.agent.total_value_managed += tx.amount
+                except Exception as tx_e:
+                    logger.error(f"Failed to create transaction for action: {str(tx_e)}")
+
             intent.last_executed = timezone.now()
-            
+
             if intent.execution_frequency != 'ON_DEMAND':
                 # Schedule next execution
                 if intent.execution_frequency == 'DAILY':
@@ -415,29 +492,25 @@ class IntentViewSet(viewsets.ModelViewSet):
                     intent.next_execution = timezone.now() + timezone.timedelta(weeks=1)
                 elif intent.execution_frequency == 'MONTHLY':
                     intent.next_execution = timezone.now() + timezone.timedelta(days=30)
-            
+
             intent.save()
-            
-            # Update agent stats
-            agent = intent.agent
-            agent.total_executions += 1
-            agent.last_active = timezone.now()
-            agent.save()
-            
-            logger.info(f"Executed intent {intent.id} with {len(execution_plan.get('actions', []))} actions")
-            
+            intent.agent.last_active = timezone.now()
+            intent.agent.save()
+
+            logger.info(f"Executed intent {intent.id} with {len(transactions_created)} transactions")
+
             return Response({
-                'status': 'Intent execution initiated',
+                'status': 'Intent execution completed',
                 'execution_id': str(uuid.uuid4()),
                 'plan': execution_plan,
-                'actions_generated': len(execution_plan.get('actions', [])),
+                'actions_generated': len(actions),
+                'transactions_created': transactions_created,
                 'next_execution': intent.next_execution,
                 'agent_performance': {
-                    'total_executions': agent.total_executions,
-                    'success_rate': agent.successful_executions / max(agent.total_executions, 1)
+                    'total_executions': intent.agent.total_executions,
+                    'success_rate': intent.agent.successful_executions / max(intent.agent.total_executions, 1)
                 }
-            })
-            
+            })            
         except Exception as e:
             logger.error(f"Intent execution failed: {str(e)}")
             
@@ -588,15 +661,42 @@ class TransactionViewSet(viewsets.ReadOnlyModelViewSet):
             # Update transaction based on AI validation
             if ai_validation.get('is_compliant', False):
                 transaction.status = 'APPROVED'
-                transaction.mpc_session_id = str(uuid.uuid4())  # Simulated MPC session
+                transaction.mpc_session_id = str(uuid.uuid4())
                 
-                # Here you would initiate actual MPC signing with Ika network
-                # ika_service.initiate_mpc_signing(transaction, policy_check)
-                
-                logger.info(f"Transaction {transaction.id} approved by AI policy check")
+                # Initiate actual MPC signing with Ika network
+                try:
+                    # Prepare message to sign (in a real app, this would be the actual tx hash)
+                    # Using the transaction UUID as a dummy message for the prototype
+                    message_to_sign = list(transaction.id.bytes)
+                    
+                    agent = transaction.agent
+                    user_share = agent.decrypt_share()
+                    
+                    if user_share and agent.dwallet_id and agent.dwallet_cap_id:
+                        logger.info(f"Initiating MPC signing for transaction {transaction.id}...")
+                        sign_result = ika_service_instance.sign_transaction(
+                            dwallet_id=agent.dwallet_id,
+                            dwallet_cap_id=agent.dwallet_cap_id,
+                            user_secret_key_share=user_share,
+                            message=message_to_sign
+                        )
+                        
+                        transaction.iaka_signature = json.dumps(sign_result['signature'])
+                        transaction.status = 'SIGNED'
+                        transaction.signed_at = timezone.now()
+                        logger.info(f"Transaction {transaction.id} signed successfully by Ika")
+                    else:
+                        logger.warning(f"Agent {agent.id} missing dWallet or share. Cannot sign.")
+                        transaction.status = 'FAILED'
+                        transaction.error_message = "Agent missing dWallet configuration"
+                except Exception as e:
+                    logger.error(f"MPC signing failed for tx {transaction.id}: {str(e)}")
+                    transaction.status = 'FAILED'
+                    transaction.error_message = f"MPC signing failed: {str(e)}"
                 
                 response_data = {
-                    'status': 'Transaction approved for MPC signing',
+                    'status': 'Transaction processed',
+                    'tx_status': transaction.status,
                     'mpc_session_id': transaction.mpc_session_id,
                     'ai_validation': {
                         'compliant': True,

@@ -11,4 +11,5 @@ router.register(r'policy-checks', views.PolicyCheckViewSet, basename='policy-che
 urlpatterns = [
     path('', include(router.urls)),
     path('transactions/propose/', views.TransactionViewSet.as_view({'post': 'propose'}), name='propose-transaction'),
+    path('emergency-response/', views.EmergencyResponseView.as_view(), name='emergency-response'),
 ]

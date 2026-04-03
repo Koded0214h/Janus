@@ -1,0 +1,422 @@
+Superteam Earn
+Bounties
+Projects
+Grants
+
+Frontier
+Ranger
+Ranger Build-A-Bear Hackathon Main Track
+by Ranger
+
+|
+
+Bounty
+
+|
+Submissions Open
+
+|
+
+Global
+|
+10
+
+70
+
+Abhishek
+Pratik
+Yash
+
+Prizes
+Details
+token icon
+1M
+USDC
+Total Prizes
+
+500k
+
+USDC
+
+1st
+
+300k
+
+USDC
+
+2nd
+
+200k
+
+USDC
+
+3rd
+
+34
+
+SUBMISSIONS
+
+3d:14h:58m
+
+REMAINING
+
+SKILLS NEEDED
+
+Backend
+Blockchain
+CONTACT
+
+Reach outif you have any questions about this listing
+WINNER ANNOUNCEMENT BY
+
+April 21, 2026 - as scheduled by the sponsor.
+RELATED LIVE LISTINGS
+
+Superteam Ukraine
+Build Universal Solana Indexer with Dynamic Schema & API
+
+Superteam Ukraine
+
+USDG
+1,200
+USDG
+
+|
+
+|
+
+Due in 3d
+
+Ranger
+Ranger Build-A-Bear Hackathon Drift Side Track
+
+Ranger
+
+USDC
+200k
+USDC
+
+|
+
+|
+
+Due in 3d
+
+Nosana_AI
+Nosana Builders Challenge: ElizaOS
+
+Nosana_AI
+
+USDC
+3,000
+USDC
+
+|
+
+|
+
+Due in 11d
+
+Superteam Ukraine
+Develop React Native SDK for Solana Hardware Wallet Integration
+
+Superteam Ukraine
+
+USDG
+1,000
+USDG
+
+|
+
+|
+
+Due in 11d
+
+Superteam Australia
+Superteam Australia | Website Design & Build Challenge
+
+Superteam Australia
+
+USDG
+3,000
+USDG
+
+|
+
+|
+
+Due in 14d
+
+🐻 Build-A-Bear Hackathon | Main Track
+Ranger is running a 4-week online hackathon to build and deploy vault strategies on Solana — giving participants a chance to showcase their edge and fast-track their way to running a live product with real AUM behind it.
+
+Who it's for: Traders and developers who have a yield or trading strategy they want to experiment with and scale. Solo or team.
+
+What you can build: Production-ready vault strategies. Basis trades, delta-neutral, RWA, AI-driven, or anything novel.
+
+Why: Winning strategies get seeded with real TVL (up to $1M on this track) and deployed on-chain via Ranger Earn. Vault managers earn ongoing performance fees post-hackathon.
+
+All teams are eligible for the Main Track. If you want to compete for the Drift Side Track prizes as well, submit separately on the Drift Side Track page.
+
+🏆 Main Track Prizes
+1st Place — Up to $500,000 in vault seeding
+
+2nd Place — Up to $300,000 in vault seeding
+
+3rd Place — Up to $200,000 in vault seeding
+
+Sponsor Prizes (Main Track Top 3)
+
+$15,000 in audit credits — Adevar Labs
+
+3 months free MPC wallet infrastructure — Cobo
+
+AWS Credits — $10,000 each awarded to:
+
+3 Main Track winners
+
+3 Drift Side Track winners
+
+3 Honorable Mentions
+
+Benefits for All Participants
+
+1 month free Helius Dev Plan — Helius
+
+Free Cobo Web3 wallet testing accounts — Cobo
+
+🏆 Drift Side Track Prizes
+
+1st Place — $100,000 in vault seeding
+
+2nd Place — $60,000 in vault seeding
+
+3rd Place — $40,000 in vault seeding
+
+✅ Prize Eligibility Requirements
+Review carefully before building. Strategies that don't meet these requirements will not be eligible for seeding prizes regardless of competition performance.
+
+Minimum APY: 10%
+
+Vault Base Asset: USDC
+
+Tenor: 3-month lock, rolling — reassessed every 3 months
+
+Disqualifying yield sources:
+
+Ponzi-like yield-bearing stables — circular yield dependencies (e.g. Vault A exposes to YBS X, Y, Z where X depends on Y, Y depends on Z, Z depends on X). Can cause death spirals.
+
+Junior tranche / insurance pool designs — e.g. RLP, jrUSDe. Carry principal loss risk.
+
+DEX LP vaults — e.g. JLP, HLP, LLP. Carry impermanent loss / principal loss risk.
+
+High-leverage looping — health rate below 1.05 on assets whose price is not hardcoded in the oracle.
+
+Prize Disclaimer
+
+Vault seeding amounts are indicative and awarded at Presto Labs' discretion based on strategy quality and seeding requirements.
+
+📅 Timeline
+Kickoff 
+Mar 9
+
+Build Window 
+Mar 9 – Apr 6
+
+Workshop 1: Launch & Operate Your Ranger Vault 
+Wed, Mar 11 — 3–4pm UTC
+Link: https://us05web.zoom.us/j/81469827696?pwd=IBTKThF1EuYEh1t0Ok6RxJdQjrUN0S.1
+Passcode: 566337
+
+Workshop 2: Compose with Ranger Vaults via CPI / Custom Adaptors 
+Fri, Mar 13 — 3–4pm UTC
+Link: https://us05web.zoom.us/j/87277759766?pwd=y7NKAzTcYIdqxa3m5Rrt5WReIdQtCP.1
+Passcode: 501493
+
+Workshop 3: Drift Perps and Vaults 
+Mon, Mar 16 — 3–4pm UTC
+Link: https://us05web.zoom.us/j/89451647662?pwd=vV0kC0tDWMcIjbSrNAnRO4UnOSTIJn.1
+Passcode: 209390
+
+Workshop 4: Cobo MPC Wallet Infra 
+Tue, Mar 17 — TBC check TG for more info
+
+Submissions Deadline 
+Apr 6, 23:59 UTC
+
+Judging 
+Apr 7–11
+
+Results 
+Apr 14
+
+Join the Ranger Telegram for updates, workshops, technical help, and questions.
+
+📋 Submission Requirements
+Submit all of the following via this bounty page by April 6, all the submissions must be made through Earn to be eligible:
+
+🎥 Demo/Pitch Video (max 3 min) 
+Walk us through your strategy, your edge, and how it operates on Ranger Earn.
+
+📄 Strategy Documentation 
+Explain your strategy thesis, how it works in practice, and your risk management approach — including drawdown limits, position sizing, and rebalancing logic.
+
+💻 Code Repository 
+Open-source repos are encouraged, but you may keep your repo private. If your repo is private, you are required to add @jakeyvee on GitHub so that organizers and judges can review your code. Submissions without verifiable code will not be considered.
+
+🔗 On-chain Verification 
+Submit the wallet address or vault address used during the hackathon build window (Mar 9 – Apr 6). We will verify trade activity and performance directly on-chain via Solscan.
+
+📊 CEX Strategy Verification (if applicable) 
+If your strategy involves CEX execution, submit:
+
+Trade history CSV export from your exchange (Binance, OKX, Bybit, etc.)
+
+A read-only API key for further verification
+
+Why we require this: Seed TVL prizes are awarded based on verified strategy performance. On-chain addresses and CEX trade history allow us to confirm that trades occurred within the hackathon window, that PnL is real, and that your strategy matches your documentation. This protects the integrity of the competition and ensures fair judging for all participants.
+
+Live performance during the hackathon period (Mar 9–Apr 6) is preferred, but backtested results are accepted.
+
+⚖️ Judging Criteria
+Strategy Quality & Edge – Genuine alpha or defensible thesis. Differentiated approach.
+
+Risk Management – Drawdown limits, liquidation protection, position sizing, rebalancing.
+
+Technical Implementation – Code quality, adaptor integration, vault architecture, security.
+
+Production Viability – Realistic deployment path, scalability, operational complexity.
+
+Novelty & Innovation – New primitives, creative protocol combinations, ecosystem contribution.
+
+📚 Resources
+Hackathon Landing Page
+
+Ranger Earn Docs
+
+Ranger Hackathon Telegram
+
+Drift Docs
+
+Cobo Docs
+
+
+Comments Icon
+10
+
+Comments
+
+Write a comment
+Peter ifeanyichukwu
+
+3d ago
+
+https://x.com/peter_crypt001/s......
+
+
+Habib Abdullahi
+
+6d ago
+
+Tutorial https://x.com/giant__01/status...
+
+
+avatar
+Hassan Jimoh
+
+6d ago
+
+Tutorial https://x.com/4LA_HANN/status/...
+
+
+avatar
+Akanimo Nyah
+
+10d ago
+
+https://x.com/i/status/2036502...
+
+
+Favour Egegbula
+
+11d ago
+
+Check out my post 🙏 https://x.com/favour40893/stat...
+
+
+avatar
+Brown Carter
+
+13d ago
+
+1m can be divided into 100 or even a thousand winners. but you guys say 3
+
+
+3
+Replies
+
+avatar
+FelpsCrypto Reis
+
+17d ago
+
+Hi guys
+
+
+avatar
+MichaeL Nom
+
+18d ago
+
+guys this is juicy
+
+
+IKECHUKWU PASCAL
+
+19d ago
+
+Hi guys
+
+
+avatar
+Da Niel
+
+23d ago
+
+Yo no nigga got the balls damn
+
+
+3
+Replies
+
+Superteam Earn
+Discover high paying crypto bounties, projects and grants from the best Solana companies in one place and apply to them using a single profile.
+
+Powered by Solana
+Opportunities
+
+Bounties
+Projects
+Jobs
+Grants
+Categories
+
+Content
+Design
+Development
+Others
+About
+
+FAQ
+Terms
+Privacy Policy
+Changelog
+Contact Us
+© 2026 Superteam. All rights reserved.
+
+SKILL
+
+
+REGION
+
+

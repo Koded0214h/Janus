@@ -29,8 +29,9 @@ class UserManager(BaseUserManager):
 
 class User(AbstractBaseUser, PermissionsMixin):
     email = models.EmailField(_('email address'), unique=True)
-    wallet_address = models.CharField(max_length=255, blank=True, null=True)
+    wallet_address = models.CharField(max_length=255, blank=True, null=True, unique=True)
     sui_address = models.CharField(max_length=255, blank=True, null=True)
+    nonce = models.CharField(max_length=100, blank=True, null=True)
     
     # Identity verification
     is_verified = models.BooleanField(default=False)
@@ -106,6 +107,7 @@ class UserProfile(models.Model):
     preferred_chains = models.JSONField(default=list)  # ['SUI', 'ETH', 'BTC']
     excluded_protocols = models.JSONField(default=list)
     max_gas_per_tx = models.DecimalField(max_digits=10, decimal_places=2, default=10.00)
+    recovery_address = models.CharField(max_length=255, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

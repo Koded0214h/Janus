@@ -11,6 +11,13 @@ class DashboardStatsSerializer(serializers.Serializer):
     successful_transactions = serializers.IntegerField()
     total_value_managed = serializers.DecimalField(max_digits=20, decimal_places=8)
     compliance_rate = serializers.FloatField()
+    
+    # Security stats
+    shard_health = serializers.JSONField()
+    mpc_status = serializers.CharField()
+    last_key_rotation = serializers.DateTimeField()
+    daily_limit_max = serializers.DecimalField(max_digits=20, decimal_places=2)
+    daily_limit_used = serializers.DecimalField(max_digits=20, decimal_places=2)
 
 class ActivityFeedSerializer(serializers.Serializer):
     timestamp = serializers.DateTimeField()

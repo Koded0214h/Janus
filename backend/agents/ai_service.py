@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class AIConfig:
     """Configuration for AI models"""
-    primary_model: str = "gemini-pro"  # Default to Gemini
+    primary_model: str = "gemini-2.5-flash"  # Default to Gemini
     fallback_model: str = "claude-3-haiku-20240307"
     temperature: float = 0.1
     max_tokens: int = 1000
@@ -134,7 +134,7 @@ class AIService:
                 return self._call_anthropic(prompt, system_prompt)
             raise
     
-    def parse_natural_language_intent(self, text: str, intent_type: str, ai_model: str = "gemini-pro") -> Dict[str, Any]:
+    def parse_natural_language_intent(self, text: str, intent_type: str, ai_model: str = "gemini-2.5-flash") -> Dict[str, Any]:
         """
         Parse natural language into structured intent parameters using AI.
         """
@@ -180,7 +180,7 @@ Return ONLY valid JSON with this structure:
 If the intent is unclear or ambiguous, set confidence_score low and add "requires_manual_review": true."""
         
         try:
-            response = self.call_ai(prompt, system_prompt, use_gemini=(ai_model == "gemini-pro"))
+            response = self.call_ai(prompt, system_prompt, use_gemini=(ai_model == "gemini-2.5-flash"))
             
             # Extract JSON from response
             json_start = response.find('{')

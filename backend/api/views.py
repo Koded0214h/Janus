@@ -19,6 +19,7 @@ class DashboardStatsView(APIView):
     
     def get(self, request):
         user = request.user
+        profile = getattr(user, 'profile', None)
         
         # Calculate stats
         total_agents = Agent.objects.filter(user=user).count()
@@ -42,10 +43,24 @@ class DashboardStatsView(APIView):
         if total_transactions > 0:
             compliant_transactions = Transaction.objects.filter(
                 user=user,
-                status='EXECUTED'
+                status__in=['EXECUTED', 'SIGNED', 'APPROVED']
             ).count()
             compliance_rate = (compliant_transactions / total_transactions) * 100
         
+        # Security stats
+        today = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        daily_limit_used = Transaction.objects.filter(
+            user=user,
+            status='EXECUTED',
+            executed_at__gte=today
+        ).aggregate(total=Sum('amount'))['total'] or 0
+        
+        daily_limit_max = profile.max_gas_per_tx * 10 if profile else 500.00 # Placeholder logic
+        
+        # Get latest agent for "last rotation"
+        latest_agent = Agent.objects.filter(user=user).order_by('-created_at').first()
+        last_key_rotation = latest_agent.created_at if latest_agent else timezone.now()
+
         stats = {
             'total_agents': total_agents,
             'active_agents': active_agents,
@@ -54,7 +69,12 @@ class DashboardStatsView(APIView):
             'total_transactions': total_transactions,
             'successful_transactions': successful_transactions,
             'total_value_managed': total_value_managed,
-            'compliance_rate': round(compliance_rate, 2)
+            'compliance_rate': round(compliance_rate, 2),
+            'shard_health': {'active': 102, 'total': 120}, # Mock for now
+            'mpc_status': 'OPTIMAL',
+            'last_key_rotation': last_key_rotation,
+            'daily_limit_max': daily_limit_max,
+            'daily_limit_used': daily_limit_used
         }
         
         serializer = DashboardStatsSerializer(stats)

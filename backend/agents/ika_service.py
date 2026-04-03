@@ -169,6 +169,49 @@ class IkaService:
         print(f"[Ika] dWallet created! ID: {result['dWalletObjectId']}")
         return result
 
+    def sign_transaction(
+        self,
+        dwallet_id: str,
+        dwallet_cap_id: str,
+        user_secret_key_share: list,
+        message: list,
+        curve: int = 0
+    ) -> dict:
+        """
+        Request a signature for a message from the Ika network.
+
+        Args:
+            dwallet_id: The ID of the dWallet object on-chain.
+            dwallet_cap_id: The ID of the dWalletCap object on-chain.
+            user_secret_key_share: The user's secret share (list of numbers).
+            message: The message to sign (list of numbers).
+            curve: 0=secp256k1, 1=secp256r1, 2=ed25519.
+
+        Returns:
+            {
+              signature: list of numbers,
+              digest: string
+            }
+        """
+        print(f"[Ika] Requesting signature for message using dWallet {dwallet_id}...")
+        resp = requests.post(
+            f"{self.bridge_url}/api/sign/submit",
+            json={
+                "dWalletObjectId": dwallet_id,
+                "dWalletCapObjectId": dwallet_cap_id,
+                "userSecretKeyShare": user_secret_key_share,
+                "message": message,
+                "curve": curve
+            },
+            timeout=180,  # MPC signing can be slow
+        )
+        result = resp.json()
+        if not resp.ok or not result.get("success"):
+            raise Exception(f"Bridge sign failed: {result.get('error', resp.text)}")
+
+        print("[Ika] Signature obtained successfully!")
+        return result
+
 
 # ── CLI test ──────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
