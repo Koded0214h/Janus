@@ -7,6 +7,7 @@ class Agent(models.Model):
     AGENT_TYPE_CHOICES = [
         ('YIELD_FARMER', 'Yield Farmer'),
         ('REBALANCER', 'Portfolio Rebalancer'),
+        ('DRIFT_VAULT_MANAGER', 'Drift Vault Manager'),
         ('SENTRY', 'Security Sentry'),
         ('COMPLIANCE', 'Compliance Checker'),
         ('CUSTOM', 'Custom Agent'),
@@ -64,6 +65,7 @@ class Intent(models.Model):
     INTENT_TYPE_CHOICES = [
         ('PORTFOLIO_REBALANCE', 'Portfolio Rebalance'),
         ('YIELD_FARMING', 'Yield Farming'),
+        ('BASIS_TRADE', 'Delta-Neutral Basis Trade'),
         ('RISK_MANAGEMENT', 'Risk Management'),
         ('LIQUIDITY_PROVISION', 'Liquidity Provision'),
         ('EMERGENCY_WITHDRAWAL', 'Emergency Withdrawal'),

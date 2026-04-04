@@ -255,6 +255,19 @@ const Policies = () => {
                     <p className="text-on-surface-variant text-sm">Maintain target weightings for your assets automatically.</p>
                   </div>
                 </div>
+                <div 
+                  className="bg-surface-container flex rounded-sm overflow-hidden border border-outline-variant/10 group cursor-pointer"
+                  onClick={() => {
+                    setPolicyIntent("Open a delta-neutral basis trade on Drift Protocol. Short ETH-PERP to hedge 100% of my spot ETH holdings. Rebalance if hedge ratio deviates by 2%.");
+                    setIntentType("BASIS_TRADE");
+                    setActiveTab("create");
+                  }}
+                >
+                  <div className="p-6">
+                    <h4 className="text-xl font-bold text-primary mb-2 uppercase">Drift Basis Trader</h4>
+                    <p className="text-on-surface-variant text-sm">Hedge spot holdings with perps to capture funding rates safely.</p>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -278,6 +291,7 @@ const Policies = () => {
                       >
                         <option value="PORTFOLIO_REBALANCE">Rebalance</option>
                         <option value="YIELD_FARMING">Yield Farming</option>
+                        <option value="BASIS_TRADE">Delta-Neutral Basis Trade</option>
                       </select>
                     </div>
                   </div>

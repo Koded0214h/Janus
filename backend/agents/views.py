@@ -9,6 +9,8 @@ from django.conf import settings
 import uuid
 import json
 import logging
+import os
+import requests
 
 from .models import Agent, Intent, Transaction, PolicyCheck
 from .serializers import (
@@ -456,7 +458,47 @@ class IntentViewSet(viewsets.ModelViewSet):
 
             for action_data in actions:
                 try:
-                    # Create transaction
+                    # Handle Solana Drift actions
+                    if action_data.get('chain') == 'SOLANA' and 'drift' in action_data.get('type', ''):
+                        logger.info(f"Executing Solana Drift trade for intent {intent.id}...")
+                        
+                        # In a real app, we'd derive the Solana address from the dWallet
+                        # For now, we use a placeholder or derive from the seed
+                        solana_address = intent.agent.config.get('solana_address', "D6U7...mock")
+                        owner_address = intent.user.wallet_address or "SOL...owner"
+                        
+                        user_share = intent.agent.decrypt_share()
+                        
+                        drift_bridge_url = os.getenv("DRIFT_BRIDGE_URL", "http://localhost:3002")
+                        
+                        try:
+                            drift_resp = requests.post(
+                                f"{drift_bridge_url}/api/drift/trade",
+                                json={
+                                    "agentAddress": solana_address,
+                                    "ownerAddress": owner_address,
+                                    "dWalletObjectId": intent.agent.dwallet_id,
+                                    "dWalletCapObjectId": intent.agent.dwallet_cap_id,
+                                    "userSecretKeyShare": user_share,
+                                    "action": action_data.get('type'),
+                                    "amount": int(float(action_data.get('amount', 1)) * 1e6), # to base units
+                                    "aum": 1000000000, # Example AUM
+                                    "asset": action_data.get('asset', 'SOL')
+                                },
+                                timeout=120
+                            )
+                            
+                            if drift_resp.ok:
+                                result = drift_resp.json()
+                                tx_hash = result.get('txid')
+                                logger.info(f"Drift trade successful: {tx_hash}")
+                            else:
+                                logger.error(f"Drift bridge failed: {drift_resp.text}")
+                        except Exception as bridge_e:
+                            logger.error(f"Failed to call Drift bridge: {str(bridge_e)}")
+
+                    # Create transaction record
+                    from decimal import Decimal
                     tx = Transaction.objects.create(
                         intent=intent,
                         agent=intent.agent,
@@ -464,7 +506,7 @@ class IntentViewSet(viewsets.ModelViewSet):
                         chain=action_data.get('chain', 'SUI'),
                         from_address=intent.agent.dwallet_id or "0x" + uuid.uuid4().hex,
                         to_address=action_data.get('to_address', "0x" + uuid.uuid4().hex),
-                        amount=action_data.get('amount', 1.0),
+                        amount=Decimal(str(action_data.get('amount', 1.0))),
                         token_symbol=action_data.get('to', action_data.get('token_symbol', 'SUI')),
                         token_address=action_data.get('token_address', ''),
                         protocol=action_data.get('protocol', ''),
