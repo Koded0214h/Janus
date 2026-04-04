@@ -1,98 +1,58 @@
-# Janus Protocol
+# Janus Protocol — Solana Vault Manager
 
-> **The Secure Transaction Layer for the Agentic Web.**
+> **The Secure Execution Layer for Autonomous Agents on Solana.**
 
-**Janus** is an AI-native execution framework that empowers users to automate complex on-chain transactions without sacrificing custody or privacy. By combining **Natural Language Intents** with **Sharded Key Management**, Janus ensures that your AI assistant is powerful enough to grow your wealth, but too restricted to steal it.
-
----
-
-## 🌟 The Core Innovation
-
-Most AI bots require you to give them your full private key—one hack, and you lose everything. **Janus** changes the game:
-
-1. **AI Assistant (The Brain):** Executes trades, finds yield, and manages gas.
-2. **Sharded Sentry (The Bodyguard):** Your key is split. The AI only has one piece. It literally *cannot* move funds unless it follows the specific "Intent Rules" you set.
-3. **ZK-Passport (The ID):** Your agent proves it belongs to a verified human, allowing it into "Institutional-only" DeFi pools while keeping your real name hidden.
+**Janus** is an AI-native execution framework designed for the Ranger Hackathon. It enables users to deploy autonomous trading bots that manage complex strategies—like Delta-Neutral Basis Trades on Drift Protocol—while ensuring on-chain compliance and sharded key security.
 
 ---
 
-## 📖 Real-World Scenarios
+## 🌟 The Core Innovation: Solana Pivot
 
-### Scenario A: The "Set and Forget" Yield Hunter
+Most AI bots require full private key access. Janus changes this by splitting the key and enforcing rules on-chain:
 
-* **User Intent:** *"Janus, monitor my wallet. If I have more than $500 in idle USDC, move the excess into the safest RWA (Real World Asset) treasury pool paying at least 4.5% APY."*
-* **Janus Action:** The agent scans protocols like **Ondu** or **BlackRock’s BUIDL**. It finds a match, calculates the gas, and uses its **Shard B** to propose the trade.
-* **Security Check:** The **Sharded Sentry** checks your policy: *"Is this to a verified RWA pool? Yes. Is it under the $1k limit? Yes."* The transaction is signed and executed autonomously while you sleep.
+1.  **AI Strategist (Gemini/Claude):** Generates high-alpha execution plans (e.g., "Short ETH-PERP on Drift to hedge spot holdings").
+2.  **Solana Policy Engine (Anchor):** An on-chain "Judge" that validates every trade against AUM-based spend limits.
+3.  **MPC Sharded Sentry (Ika Network):** Your Solana key is sharded. The AI literally cannot move funds without an atomic compliance check and a co-signature from the Ika network.
 
-### Scenario B: The "Emergency Circuit Breaker"
+---
 
-* **The Threat:** A DeFi protocol you are using gets a "security alert" on Twitter.
-* **Janus Action:** Janus detects the alert via its social-sentiment engine.
-* **The Execution:** It immediately pulls your funds out of the risky protocol and moves them to your hardware wallet.
-* **The Result:** You saved your capital before you even saw the news notification.
+## 📖 Hackathon Use Case: Delta-Neutral Basis Trader
 
-### Scenario C: The "Institutional Passport"
-
-* **The Hurdle:** You want to join a high-yield "Private Credit" pool that requires KYC (Know Your Customer). You don't want to dox your wallet to a random dapp.
-* **Janus Action:** Janus presents a **Zero-Knowledge Proof (ZK-Proof)**.
-* **The Result:** The protocol sees a "Valid Human" signal and lets the agent in. Your identity remains private, but your agent is treated like a VIP.
+*   **User Intent:** *"Maintain a delta-neutral position on my ETH. Short perps on Drift whenever I buy spot to capture funding rates."*
+*   **Janus Action:** The agent scans Drift perp markets and Jupiter spot prices. It constructs a single, atomic Solana transaction.
+*   **Compliance Check:** The `janus_policy` program checks: *"Is this trade within 5% of AUM? Yes. Is Drift an approved protocol? Yes."*
+*   **Execution:** The transaction is signed via MPC and executed on-chain.
 
 ---
 
 ## 🏗️ Technical Architecture
 
-| Component | Responsibility | Tech Stack |
+| Layer | Responsibility | Tech Stack |
 | --- | --- | --- |
-| **Logic Layer** | LLM-based Intent Parsing | Python / LangGraph |
-| **Identity Layer** | ZK-Proof Generation (KYA) | Quadrata / EAS |
-| **Security Layer** | Threshold Key Sharding | Lit Protocol |
-| **Execution Layer** | Programmable Smart Accounts | ERC-4337 (Base/Eth) |
+| **Strategy Layer** | Intent Parsing & Planning | Python / Gemini 2.0 |
+| **Trading Layer** | Perpetual & Spot Integration | Drift V2 / Jupiter |
+| **Enforcement Layer** | On-Chain Compliance | Solana / Anchor |
+| **Security Layer** | Threshold Key Management | Ika Network (Ed25519) |
 
 ---
 
-## 🚀 Quick Start (Alpha)
+## 🚀 Deployment (Quick Start)
 
-### 1. Installation
+See `DEPLOY.md` for full instructions.
 
-```bash
-git clone https://github.com/yourname/janus-protocol.git
-cd janus-protocol
-npm install && pip install -r requirements.txt
-
-```
-
-### 2. Configure Your Intent Policy
-
-Edit `policies.json` to define what your AI is allowed to do:
-
-```json
-{
-  "max_transaction_value": "500 USD",
-  "allowed_protocols": ["Aave", "Uniswap", "Ondu"],
-  "emergency_withdraw_address": "0xYourHardwareWallet..."
-}
-
-```
-
-### 3. Launch Janus
-
-```bash
-python main.py --mode autonomous
-
-```
+1.  **Deploy Contract:** `cd janus_policy && anchor deploy`
+2.  **Start Bridges:** `node bridge/ika_bridge.js` & `node bridge/drift_bridge.js`
+3.  **Run Agent:** `python manage.py run_agent --interval 60`
 
 ---
 
 ## 🛡️ Security Disclosure
 
-Janus is built on the principle of **Principle of Least Privilege**. The AI agent is an *operator*, not an *owner*. Even in the event of a full server compromise, the attacker cannot bypass the **Sharded Sentry** to drain your funds to an unapproved address.
+Janus follows the **Principle of Least Privilege**. The AI agent is an *operator*, not an *owner*. On-chain logic prevents any trade that deviates from user-defined safety parameters.
 
 ---
 
-## 🤝 Contact & Contributions
-
-Janus is currently in **private alpha**. We are looking for researchers in ZK-Proofs and Agentic Workflows to help us scale the trust layer of the internet.
-
-* **Developer:** [Your Name / Alias]
-* **Identity:** `kodedthecoder.eth`
-* **Project Site:** `janus.network` (Coming Soon)
+## 🤝 Ranger Hackathon Submission
+*   **Track:** Main Track (Vault Strategies)
+*   **Side Track:** Drift Side Track (Native Perp Integration)
+*   **Developer:** kodedthecoder
