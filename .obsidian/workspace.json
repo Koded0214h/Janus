@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "DEPLOY.md",
+                "file": "README.md",
                 "mode": "preview",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "DEPLOY"
+              "title": "README"
             }
           }
         ]
@@ -185,6 +185,9 @@
   },
   "active": "003bb9afc7a90400",
   "lastOpenFiles": [
+    "Janus.mov",
+    "DOCUMENTATION.md",
+    "DEPLOY.md",
     "janus_policy/test-ledger/snapshot-10200-92HzdNqD3yfexJe3BRVjrQbZWCQAmi95VnftxVAihDfJ.tar.zst",
     "janus_policy/test-ledger/snapshots/10200/full_snapshot_slot",
     "janus_policy/test-ledger/snapshots/10200/fastboot_version",
@@ -194,7 +197,6 @@
     "janus_policy/test-ledger/accounts/snapshot/10200/145.7",
     "janus_policy/test-ledger/accounts/snapshot/10200/143.8",
     "janus_policy/test-ledger/accounts/snapshot/10200/140.9",
-    "janus_policy/test-ledger/accounts/snapshot/10200/139.10",
-    "janus_policy/test-ledger/accounts/snapshot/10200/10200.123"
+    "janus_policy/test-ledger/accounts/snapshot/10200/139.10"
   ]
 }
