@@ -1,77 +1,123 @@
-# Product Requirements Document: Janus Protocol (Solana Edition)
+# Janus — Product Requirements Document
 
-## 1. Overview
-**Product Name:** Janus Protocol — Autonomous AI Vault Manager  
-**Vision:** A zero-trust, AI-native execution layer where autonomous agents safely manage Solana assets using split-key custody and on-chain compliance.
+**Owner:** Koded (Koded Labs)
+**Status:** Draft, active build
+**One-liner:** A self-hosted policy gate that lets an AI agent move real naira within rules you set, and refuses everything else.
 
-## 2. Problem Statement
-AI agents currently face a security paradox:
-1. **Full-key risk:** Giving AI complete private key access exposes users to catastrophic loss.
-2. **Manual bottleneck:** Requiring human approval for every transaction defeats automation.
-3. **Compliance gap:** Autonomous trading often lacks real-time guardrails for risk management.
+---
 
-## 3. Solution: Janus + Drift + Ika Architecture
+## 1. Background
 
-### Core Components:
-1. **Janus Intent Layer** - Natural Language → Machine-Readable Strategies (e.g., Delta-Neutral Basis Trades).
-2. **Janus Policy Engine (Solana)** - On-chain compliance judge built with Anchor to enforce spend limits and protocol allow-lists.
-3. **Ika MPC Bridge** - Sharded key management for Solana (Ed25519) to ensure the AI never acts alone.
-4. **Drift Protocol Integration** - Native perpetual trading and vault management on Solana.
+The v1 of Janus tried to be four products at once: a yield optimizer, a zero-knowledge identity layer, an MPC custody wallet, and a breach-response system. It collapsed under its own scope. This rebuild keeps exactly one piece, the piece the article that started this concluded was the actual hard problem: the trust layer that decides whether a software agent is allowed to spend money.
 
-### Technical Stack:
-| Layer | Technology | Purpose |
-|-------|------------|---------|
-| **Intent Parser** | Google Gemini / Claude | Convert "Hedge my ETH" to structured Drift orders |
-| **Policy Engine** | Solana Anchor (Rust) | Immutable, on-chain execution rules |
-| **Trading Layer** | Drift Protocol V2 | Perp positions and spot hedging |
-| **Key Management** | Ika Network MPC | 2-of-2 MPC signing (Agent + Ika) |
-| **Automation** | Django Background Worker | Autonomous rebalancing loop |
+The wider industry is converging on the same idea. Google's AP2 and Stripe/Tempo's MPP are both authorization layers for agent payments that stop short of moving money themselves. Janus implements that layer for a single user, self-hosted, and wires it to a live Nigerian rail so it moves real money now.
 
-## 4. Key Features & User Flows
+## 2. Problem statement
 
-### Feature 1: Basis Trade Automation
-**User Story:** "Hedge my spot ETH holdings with a short perp position on Drift."
-**Flow:**
-1. User defines intent in natural language.
-2. AI parses intent into a `BASIS_TRADE` strategy.
-3. Janus Bridge constructs an atomic Solana transaction: `[Compliance Check] + [Drift Place Order]`.
-4. Ika Network co-signs the transaction.
-5. Transaction executes on Solana, maintaining delta-neutrality.
+When an autonomous agent initiates a payment, the assumption every payment system was built on, that a human is present and clicking "confirm," breaks. Without a gate, an agent that can pay can also overpay, pay the wrong party, get manipulated, or double-pay on a retry. Janus is the gate that makes agent-initiated payments safe enough to actually switch on.
 
-### Feature 2: On-Chain Spend Limits (AUM Protection)
-**User Story:** "As a vault owner, I want to ensure my AI agent never trades more than 5% of my AUM in a single transaction."
-**Flow:**
-1. The `janus_policy` contract is initialized with a 500 bps (5%) limit.
-2. Every transaction includes a mandatory call to `check_compliance`.
-3. If the AI agent attempts to open a position larger than 5% of the portfolio, the Solana runtime rejects the transaction.
+## 3. Goals
 
-## 5. Technical Implementation (Hackathon Phases)
+- Let an agent submit a payment intent and get back a fast, deterministic `allow` / `deny` / `needs_approval` decision.
+- Enforce user-defined rules: daily cap, per-transaction cap, approval threshold, category allowlist, recipient allowlist, velocity limit.
+- Execute allowed payments as **real naira transfers** through Paystack.
+- Escalate borderline payments to a human over Telegram and block on the reply.
+- Guarantee correctness under concurrency and retries: no double-spend, no budget drift.
+- Keep an append-only audit trail of every decision and its reason.
+- Cap total exposure to a small pre-funded float.
 
-### Phase 1: Solana Pivot (Completed)
-- Ported Move policy engine to Anchor (`janus_policy`).
-- Implemented `check_compliance` with AUM-based logic.
+## 4. Non-goals (explicit kill list)
 
-### Phase 2: Drift Integration (Completed)
-- Built `drift_bridge.js` for atomic transaction construction.
-- Integrated Drift V2 instruction layout for perp orders.
+- **No yield optimization or fund allocation.** Janus never decides where money should live.
+- **No identity, KYC, or proof-of-personhood.**
+- **No breach detection or automated "move to safety."**
+- **No custody of the user's main funds.** Janus only ever touches the float.
+- **No multi-user SaaS, no dashboard polish, no billing.** Single user, one operator, for now.
 
-### Phase 3: Autonomous Automation (Completed)
-- Created `run_agent` background worker to automate rebalancing.
-- Wired frontend dashboard to real execution endpoints.
+If a proposed feature is on this list, it does not go in Janus. It becomes a separate project or it does not exist.
 
-## 6. Security Model
-1. **No Single Point of Failure:** Key shards are distributed; the agent only has one share.
-2. **On-Chain Guardrails:** The Solana smart contract is the final judge, not the AI.
-3. **Atomic Execution:** Compliance checks and trades are bundled in a single transaction.
+## 5. Definition of done
 
-## 7. Integration Points
-```rust
-// Solana Policy Check (Anchor)
-pub fn check_compliance(ctx: Context<Compliance>, amount: u64, aum: u64) -> Result<()> {
-    let limit = aum.checked_mul(policy.bps).unwrap() / 10000;
-    if amount > limit {
-        return err!(ErrorCode::OverAumSpendLimit);
-    }
-    Ok(())
-}
-```
+The build is "done" for this cycle when all of the following are true at once:
+
+1. An agent submits an intent and receives a decision in well under a second.
+2. A **real** Paystack transfer of a small naira amount, triggered by an `allow`, lands in a real recipient bank account.
+3. A payment above the per-transaction cap triggers a Telegram approval and only proceeds on "yes."
+4. A payment to a non-allowlisted recipient or over the daily cap is denied with a printed reason and moves no money.
+5. Every case above appears in the audit log with the decision, the reason, and (for transfers) the Paystack reference.
+6. Replaying the same intent twice moves money at most once.
+
+## 6. Users and primary use case
+
+**User:** one operator (you), running an agent that handles small, repeatable money errands, vendor payouts, airtime and data top-ups, delivery fees, on your behalf, within a budget you set once.
+
+**Core flow:** you set a policy. Your agent, mid-task, needs to pay for something. It asks Janus. Janus decides. Money moves, or it doesn't, and either way you have a record.
+
+## 7. Functional requirements
+
+| # | Requirement | Notes |
+|---|-------------|-------|
+| F1 | Accept a payment intent over HTTP | `{ amount_ngn, recipient, category, reason, idempotency_key }` |
+| F2 | Evaluate intent against policy + current spend | Returns `allow` / `deny` / `needs_approval` + reason |
+| F3 | Enforce caps, allowlists, velocity | Daily, per-tx, approval threshold, categories, recipients, rate |
+| F4 | Escalate to Telegram on `needs_approval` | Block until yes / no / timeout; timeout defaults to deny |
+| F5 | Execute transfer via Paystack on `allow` | Test mode first, live mode on cutover |
+| F6 | Record every decision to an append-only log | Decision, reason, timestamp, transfer ref if any |
+| F7 | Idempotent execution | Same `idempotency_key` never pays twice |
+| F8 | Read endpoints for policy and audit log | So the demo and you can inspect state |
+
+## 8. Non-functional requirements
+
+- **Correctness first.** Budget decrements and idempotency checks are atomic (Redis for the hot counters, Postgres as the durable record). Concurrency must not cause overspend.
+- **Fast decisions.** The gate decision is in-memory plus one cache read; the slow part is only the actual transfer.
+- **Auditable.** The log is append-only and never edited in place.
+- **Safe by construction.** `FLOAT_LIMIT_NGN` is a hard ceiling enforced independently of policy. Secrets live in env, never in git.
+- **Rail-agnostic core.** The executor is an interface; swapping Paystack for Flutterwave, Mono, or Squad must not touch the decision engine.
+
+## 9. Architecture
+
+- **API layer (FastAPI):** intake for intents, plus read endpoints.
+- **Decision engine:** pure function of `(intent, policy, spend_state) -> verdict`. No side effects. The heart of the system and the most tested part.
+- **Spend ledger:** Redis atomic counters for daily total and velocity window; Postgres for the durable ledger and audit trail. Idempotency keys deduplicate.
+- **Approval channel:** Telegram bot (reuse KODED OS); publishes an approval request, awaits callback, returns the human's verdict.
+- **Executor:** `PaystackExecutor implements Executor`; creates/uses a transfer recipient and initiates the transfer, returns a reference or a typed failure.
+
+## 10. Data model (sketch)
+
+- **policy**: the JSON in the README, one active version per user, versioned on change.
+- **intent**: id, amount, recipient, category, reason, idempotency_key, received_at.
+- **decision**: intent_id, verdict, reason, evaluated_at, policy_version.
+- **transfer**: decision_id, rail, rail_reference, status, amount, settled_at.
+- **audit** view: the join of the above, append-only, human-readable.
+
+Shaping `intent` and `decision` to echo AP2's Intent and Payment Mandates is optional but cheap, and makes a future AP2 adapter a small job rather than a rewrite.
+
+## 11. Milestones (time-scoped)
+
+Target: a focused weekend, roughly 10 to 14 hours. Estimates assume your usual pace and reuse of the KODED OS Telegram bot.
+
+| Phase | Deliverable | Est. | Gate to next phase |
+|-------|-------------|------|--------------------|
+| **P0 — Core gate** | Decision engine + spend ledger + audit log, fully unit-tested, no real payments | 3–4h | Decisions are correct and idempotent under a concurrency test |
+| **P1 — Paystack (test mode)** | Executor wired to Paystack test keys; `allow` triggers a test transfer end to end | 2–3h | A test intent flows intent → decision → test transfer → logged |
+| **P2 — Approval loop** | Telegram approval on `needs_approval`, blocking with timeout-to-deny | 2h | Over-cap intent pings phone and honors the reply |
+| **P3 — Live cutover (DoD)** | Live keys, ₦2,000 float, allowlisted recipients; move real naira | 1–2h | A real small transfer lands in a real account, gated and logged |
+| **P4 — Demo + polish** | Demo script, clean audit view, record the two-minute clip | 2–3h | The full demo runs start to finish on camera |
+
+**One-night MVP cut:** P0 + P1 only. That already gives you a working, idempotent gate moving money in Paystack test mode, which is demoable and is the honest core. P3 is what turns "works" into "moves real naira," and depends on your Paystack live access being sorted.
+
+## 12. Risks and mitigations
+
+| Risk | Mitigation |
+|------|-----------|
+| Live Paystack needs business verification / OTP | Do all dev in test mode; treat live as a config flip once verified |
+| Concurrency causes overspend | Atomic Redis decrement + idempotency keys; explicit concurrency test in P0 |
+| Scope creep back toward v1 | The kill list in section 4 is the contract; re-read it before adding anything |
+| Agent gets manipulated into a bad payment | Recipient allowlist + per-tx cap + human approval threshold contain the damage |
+| Key leak | Float ceiling caps loss; secrets in env only; rotate on suspicion |
+
+## 13. Open questions
+
+- Which operation is the primary demo: vendor payout (transfer out), or bill/airtime purchase? Transfer-out is assumed here; airtime would swap the executor call, not the gate.
+- Should approvals expire to `deny` (safer) or stay pending (more forgiving)? Defaulting to deny-on-timeout.
+- Is a second rail (Squad by GTCO, given the hackathon relationship) worth wiring in P4 as proof of the rail-agnostic claim, or is that a v2 flex?

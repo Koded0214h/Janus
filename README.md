@@ -1,58 +1,265 @@
-# Janus Protocol — Solana Vault Manager
+# Janus
 
-> **The Secure Execution Layer for Autonomous Agents on Solana.**
+> **A programmable trust layer for autonomous payments.**
 
-**Janus** is an AI-native execution framework designed for the Ranger Hackathon. It enables users to deploy autonomous trading bots that manage complex strategies—like Delta-Neutral Basis Trades on Drift Protocol—while ensuring on-chain compliance and sharded key security.
+Janus sits between software and a payment rail, answering one question before money moves:
 
----
+> **Is this payment allowed?**
 
-## 🌟 The Core Innovation: Solana Pivot
+Not **can** it be paid. **Should** it be paid.
 
-Most AI bots require full private key access. Janus changes this by splitting the key and enforcing rules on-chain:
-
-1.  **AI Strategist (Gemini/Claude):** Generates high-alpha execution plans (e.g., "Short ETH-PERP on Drift to hedge spot holdings").
-2.  **Solana Policy Engine (Anchor):** An on-chain "Judge" that validates every trade against AUM-based spend limits.
-3.  **MPC Sharded Sentry (Ika Network):** Your Solana key is sharded. The AI literally cannot move funds without an atomic compliance check and a co-signature from the Ika network.
+Everything else is implementation.
 
 ---
 
-## 📖 Hackathon Use Case: Delta-Neutral Basis Trader
+## Why Janus exists
 
-*   **User Intent:** *"Maintain a delta-neutral position on my ETH. Short perps on Drift whenever I buy spot to capture funding rates."*
-*   **Janus Action:** The agent scans Drift perp markets and Jupiter spot prices. It constructs a single, atomic Solana transaction.
-*   **Compliance Check:** The `janus_policy` program checks: *"Is this trade within 5% of AUM? Yes. Is Drift an approved protocol? Yes."*
-*   **Execution:** The transaction is signed via MPC and executed on-chain.
+Software is getting good enough to spend money.
 
----
+AI agents can already:
 
-## 🏗️ Technical Architecture
+* book flights
+* order food
+* pay invoices
+* renew subscriptions
+* call APIs
 
-| Layer | Responsibility | Tech Stack |
-| --- | --- | --- |
-| **Strategy Layer** | Intent Parsing & Planning | Python / Gemini 2.0 |
-| **Trading Layer** | Perpetual & Spot Integration | Drift V2 / Jupiter |
-| **Enforcement Layer** | On-Chain Compliance | Solana / Anchor |
-| **Security Layer** | Threshold Key Management | Ika Network (Ed25519) |
+Giving software a way to pay isn't the hard part. Banks already expose APIs. Payment providers already expose APIs.
 
----
+The difficult problem is authorization. How do you let software spend money...
 
-## 🚀 Deployment (Quick Start)
+* only within a budget,
+* only for approved categories,
+* only to trusted recipients,
+* while keeping a complete audit trail,
+* and without risking your primary account?
 
-See `DEPLOY.md` for full instructions.
-
-1.  **Deploy Contract:** `cd janus_policy && anchor deploy`
-2.  **Start Bridges:** `node bridge/ika_bridge.js` & `node bridge/drift_bridge.js`
-3.  **Run Agent:** `python manage.py run_agent --interval 60`
+That's the problem Janus solves.
 
 ---
 
-## 🛡️ Security Disclosure
+## The philosophy
 
-Janus follows the **Principle of Least Privilege**. The AI agent is an *operator*, not an *owner*. On-chain logic prevents any trade that deviates from user-defined safety parameters.
+Janus doesn't replace your bank. Janus doesn't replace Paystack. Janus doesn't replace your wallet.
+
+Janus decides whether a payment should happen before it reaches them. Think of it as IAM for money.
+
+```
+Software
+   │
+   ▼
+Payment Intent
+   │
+   ▼
+   Janus
+   │
+   ▼
+ALLOW / DENY / ASK
+   │
+   ▼
+Payment Rail
+```
+
+That's the entire product.
 
 ---
 
-## 🤝 Ranger Hackathon Submission
-*   **Track:** Main Track (Vault Strategies)
-*   **Side Track:** Drift Side Track (Native Perp Integration)
-*   **Developer:** kodedthecoder
+## Core principles
+
+Janus follows four principles.
+
+### 1. Trust is programmable.
+
+Permissions shouldn't live inside application code. They should be policies.
+
+### 2. Money moves through intent.
+
+Software shouldn't call:
+
+```python
+pay()
+```
+
+It should submit an intent:
+
+```python
+{
+    amount,
+    recipient,
+    reason,
+    category
+}
+```
+
+Janus decides the rest.
+
+### 3. The payment rail is replaceable.
+
+Today: Paystack, NIP.
+
+Tomorrow: Stripe, Flutterwave, Squad, Stablecoins, AP2, MPP.
+
+Janus doesn't care.
+
+### 4. Correctness is the product.
+
+Anyone can integrate a payment API. The interesting engineering starts after that:
+
+* atomic budgets
+* idempotency
+* retries
+* race conditions
+* deterministic policy evaluation
+* auditability
+
+That's where Janus lives.
+
+---
+
+## Architecture
+
+```
+                    Payment Intent
+                           │
+                           ▼
+                    Policy Engine
+                           │
+        ┌──────────────────┼──────────────────┐
+        ▼                  ▼                  ▼
+    Budget Check      Recipient Check    Approval Rules
+        │                  │                  │
+        └──────────────────┼──────────────────┘
+                           ▼
+                  Authorization Decision
+                   ALLOW / DENY / ASK
+                           │
+                 ┌─────────┴──────────┐
+                 ▼                    ▼
+         Human Approval        Payment Executor
+                                      │
+                                      ▼
+                                Payment Rail
+                                      │
+                                      ▼
+                               Audit Log
+```
+
+---
+
+## Example
+
+An AI assistant wants to pay ₦150 to a known delivery rider.
+
+Janus evaluates:
+
+* ✅ Daily budget available
+* ✅ Recipient allow-listed
+* ✅ Category allowed
+* ✅ Under approval threshold
+
+Decision: **ALLOW**. The payment executes. The audit log records why.
+
+---
+
+The same assistant now attempts to send ₦5,000.
+
+Janus evaluates:
+
+* ❌ Above approval threshold
+
+Decision: **ASK**. A Telegram notification appears. Nothing moves until you approve it.
+
+---
+
+Now it tries sending money to an unknown account.
+
+Decision: **DENY**. The payment never reaches the payment provider.
+
+---
+
+## Features
+
+* Policy-based payment authorization
+* Budget enforcement
+* Recipient allowlists
+* Category restrictions
+* Human approval workflows
+* Velocity limiting
+* Idempotent execution
+* Atomic spend accounting
+* Immutable audit logs
+* Pluggable payment executors
+
+---
+
+## Current implementation
+
+Current payment executor:
+
+* Paystack Transfers
+* Nigerian NIP settlement
+
+Planned executors:
+
+* Stripe
+* Flutterwave
+* Squad
+* AP2
+* MPP
+
+---
+
+## Tech Stack
+
+* FastAPI
+* PostgreSQL
+* Redis
+* Docker
+* Telegram Bot API
+* Paystack
+
+---
+
+## Roadmap
+
+### Phase 1
+
+* Policy engine
+* Spend ledger
+* Paystack executor
+* Telegram approvals
+
+### Phase 2
+
+* Pluggable executors
+* Multi-user policies
+* Web dashboard
+
+### Phase 3
+
+* AP2 support
+* MPP support
+* Machine identity
+* SDKs
+
+---
+
+## Inspiration
+
+Janus was inspired by a simple observation:
+
+> AI doesn't need more ways to pay. It needs better ways to ask permission.
+
+Recent work around Google's **AP2 (Agent Payments Protocol)** and **MPP (Machine Payments Protocol)** points in the same direction: separating **authorization** from **settlement**.
+
+Janus explores that idea today using existing payment rails.
+
+---
+
+## Status
+
+🚧 Early development.
+
+The goal isn't to build another payment gateway. The goal is to build the trust layer that sits in front of one.
+
+See [PRD.md](PRD.md) for the full product requirements and build plan. Earlier Solana/Drift/Ika prototype work has been moved to [`legacy/`](legacy/).
