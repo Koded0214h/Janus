@@ -209,3 +209,6 @@ migrations/
 
 
 txt
+
+# Janus backend — real bank details, never commit
+backend/recipients.json
