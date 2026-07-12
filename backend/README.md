@@ -13,12 +13,14 @@ the full spec — this is just how to run it.
 - `app/executors/paystack.py` — creates a Paystack transfer recipient and initiates a transfer.
 - `app/approvals/` — the human-in-the-loop escalation for `needs_approval` verdicts. `email_channel.py`
   is real (Gmail SMTP); `telegram_channel.py` is a stub (see below).
-- `app/routers/` — `POST /intents`, `GET /policy`, `GET /audit`, `GET/POST /approvals/{token}`.
+- `app/auth.py` — a single shared-secret header (`X-API-Key`) required on every route except
+  `/health` and `/approvals/{token}/*` (see below).
+- `app/routers/` — `POST /intents`, `GET/POST /policy`, `GET /audit`, `GET/POST /approvals/{token}`.
 
 ## Run it
 
 ```bash
-cp .env.example .env               # fill in PAYSTACK_SECRET_KEY (sk_test_... for now)
+cp .env.example .env               # fill in API_KEY, PAYSTACK_SECRET_KEY (sk_test_... for now),
                                     # and SMTP_USERNAME/SMTP_PASSWORD/APPROVAL_EMAIL_TO for approvals
 cp recipients.example.json recipients.json   # real bank details for anyone you allow-list
 
@@ -29,9 +31,24 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload      # tables are created on startup, policy is seeded on first read
 ```
 
+Generate `API_KEY` with `python -c "import secrets; print(secrets.token_urlsafe(32))"`. Every
+request to `/intents`, `/policy`, or `/audit` needs an `X-API-Key` header matching it — leaving
+`API_KEY` unset rejects every request rather than silently allowing them through.
+
 The first request to `GET /policy` seeds a default policy (₦2,000 daily cap, ₦1,000 per-tx cap,
 ₦500 approval threshold, empty recipient allowlist). Recipients and categories start closed —
-add them by updating the active `PolicyModel` row (there's no write endpoint yet; that's P2+).
+change them with `POST /policy` (see below), not a manual DB edit.
+
+## Authentication
+
+Every route except `GET /health` and `/approvals/{token}/*` requires `X-API-Key: <API_KEY>`.
+The `/approvals/*` endpoints are deliberately *not* API-key gated — they're meant to be clicked
+from an email by whoever is approving, not called by whoever holds the main key, and the
+unguessable token in the URL is the credential there instead (`secrets.token_urlsafe(24)`,
+race-safe resolution, see the approval loop section below).
+
+A missing or wrong key gets a `401`, including when `API_KEY` itself isn't set — an unset key
+fails closed, it does not mean auth is off (`app/auth.py`).
 
 ## The float ceiling
 
@@ -78,7 +95,15 @@ keeps it, denying or timing out releases it back to the daily cap.
 ## Try it
 
 ```bash
-curl -X POST localhost:8000/intents -H 'Content-Type: application/json' -d '{
+export JANUS_API_KEY=...  # whatever you set API_KEY to in .env
+
+curl -X POST localhost:8000/policy -H "X-API-Key: $JANUS_API_KEY" -H 'Content-Type: application/json' -d '{
+  "daily_cap_ngn": 2000, "per_tx_cap_ngn": 1000, "approval_threshold_ngn": 500,
+  "allowed_categories": ["delivery"], "allowed_recipients": ["rider_1"],
+  "velocity_limit_count": 10, "velocity_window_seconds": 3600
+}'
+
+curl -X POST localhost:8000/intents -H "X-API-Key: $JANUS_API_KEY" -H 'Content-Type: application/json' -d '{
   "amount_ngn": 150,
   "recipient": "rider_1",
   "category": "delivery",
@@ -86,12 +111,14 @@ curl -X POST localhost:8000/intents -H 'Content-Type: application/json' -d '{
   "idempotency_key": "demo-1"
 }'
 
-curl localhost:8000/audit
+curl localhost:8000/audit -H "X-API-Key: $JANUS_API_KEY"
 ```
 
-`recipient` and `category` must be on the active policy's allowlists or the intent is denied.
-`recipient` must also have an entry in `recipients.json` (name/account_number/bank_code) or
-a resulting `allowed` will fail at the Paystack step.
+`recipient` and `category` must be on the active policy's allowlists or the intent is denied —
+`POST /policy` above is how you set that (it creates a new policy *version*, per-row-immutable,
+never an in-place update; `GET /policy` always returns the latest active one). `recipient` must
+also have an entry in `recipients.json` (name/account_number/bank_code) or a resulting `allowed`
+will fail at the Paystack step.
 
 The response shape follows PRD §8:
 
@@ -134,6 +161,9 @@ approve/deny/timeout approval flow end to end.
 `tests/test_approvals.py` — `ApprovalService` in isolation: the blocking wait resolves
 correctly on approve/deny, times out to deny when nobody answers, and `resolve()` is race-safe
 (first resolution wins, an already-expired row refuses a late click).
+`tests/test_auth.py` — the auth dependency in isolation, including fail-closed on an unset key.
+`tests/test_policy.py` — `POST /policy` creates a new version and deactivates the previous one
+(never an in-place update), and requires the API key like everything else.
 
 ## Load test
 
@@ -142,7 +172,7 @@ in-process), firing overlapping intents to prove zero overspend and zero double-
 
 ```bash
 uvicorn app.main:app --reload &          # needs a live server, unlike pytest
-python scripts/load_test.py --concurrency 30 --per-request-ngn 50
+python scripts/load_test.py --concurrency 30 --per-request-ngn 50 --api-key "$JANUS_API_KEY"
 ```
 
 It reads the active policy's `per_tx_cap_ngn` first and refuses to run if `--per-request-ngn`
@@ -155,7 +185,9 @@ always what stops it."
 
 - A real Telegram bot — `TelegramApprovalChannel` is a stub; email is the only working
   approval channel right now.
-- A policy-write endpoint — policy changes are a manual DB update for now.
+- Live-reload for `recipients.json` — it's read once and `@lru_cache`d for the process
+  lifetime; editing it requires a restart to take effect.
 - Alembic migrations — tables are created via `Base.metadata.create_all()` on startup. Fine
   for one operator; swap in `alembic/` before this has more than one deployment target.
-- Live cutover (P3) and the load test / threat model writeup / MCP `pay` tool (P4).
+- Live cutover (P3) — blocked on Paystack's OTP-for-transfers setting on the test account
+  currently in use, not on anything in this codebase.

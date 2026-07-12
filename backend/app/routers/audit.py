@@ -2,11 +2,12 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.auth import require_api_key
 from app.deps import get_db
 from app.models import DecisionModel, IntentModel, TransferModel
 from app.schemas import AuditEntry
 
-router = APIRouter(tags=["audit"])
+router = APIRouter(tags=["audit"], dependencies=[Depends(require_api_key)])
 
 
 @router.get("/audit", response_model=list[AuditEntry])

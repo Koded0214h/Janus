@@ -12,6 +12,7 @@ Assumes the active policy already allow-lists category "delivery" and recipient 
 """
 
 import argparse
+import os
 import sys
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -107,9 +108,14 @@ def main() -> int:
     parser.add_argument("--base-url", default="http://localhost:8000")
     parser.add_argument("--concurrency", type=int, default=30)
     parser.add_argument("--per-request-ngn", type=Decimal, default=Decimal("50"))
+    parser.add_argument("--api-key", default=os.environ.get("JANUS_API_KEY", ""), help="or set JANUS_API_KEY")
     args = parser.parse_args()
 
-    with httpx.Client(base_url=args.base_url) as client:
+    if not args.api_key:
+        print("No API key given (--api-key or JANUS_API_KEY) — every request will 401.", file=sys.stderr)
+        return 2
+
+    with httpx.Client(base_url=args.base_url, headers={"X-API-Key": args.api_key}) as client:
         policy = fetch_policy(client)
         per_tx_cap = Decimal(policy["per_tx_cap_ngn"])
         if args.per_request_ngn > per_tx_cap:

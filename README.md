@@ -120,7 +120,9 @@ See [`backend/README.md`](backend/README.md) for the full run-and-test guide, in
 
 ## Policy example
 
-Declarative JSON, evaluated top to bottom. This is your standing authorization, the scope you sign once.
+Declarative JSON, evaluated top to bottom. This is your standing authorization, the scope you
+sign once — `POST /policy` with this body creates a new version and retires the previous one,
+never an in-place edit:
 
 ```json
 {
@@ -129,7 +131,8 @@ Declarative JSON, evaluated top to bottom. This is your standing authorization, 
   "approval_threshold_ngn": 200,
   "allowed_categories": ["airtime", "data", "vendor-payout", "delivery"],
   "allowed_recipients": ["0123456789@Access", "9876543210@GTB"],
-  "velocity": { "max_tx": 20, "window_seconds": 60 }
+  "velocity_limit_count": 20,
+  "velocity_window_seconds": 60
 }
 ```
 
@@ -145,7 +148,7 @@ That two-minute demo is the thesis running live: not making payments autonomous,
 
 ## Threat model
 
-Four threats, each with the mitigation actually implemented, not just planned.
+Five threats, each with the mitigation actually implemented, not just planned.
 
 | Threat | Attack | Mitigation |
 |---|---|---|
@@ -153,6 +156,7 @@ Four threats, each with the mitigation actually implemented, not just planned.
 | **Replayed request** | A network retry, a bug, or a malicious actor resubmits the same payment intent. | Every intent carries an `idempotency_key`, enforced by a Postgres unique constraint. A replay looks up and returns the original stored decision — it is never re-evaluated, and money is never moved twice. See `ledger.py`. |
 | **Leaked key** | The Paystack secret key, DB credentials, or SMTP password leak. | The hard float ceiling caps total possible loss at `FLOAT_LIMIT_NGN` regardless of what an attacker holding the key could otherwise authorize — it's enforced in the same atomic Redis reservation as every other spend check, independent of anything a leaked credential could touch. Secrets live only in `.env` (gitignored, never committed); rotate on any suspicion. |
 | **Misconfigured policy** | An operator mistake sets `daily_cap_ngn` or `per_tx_cap_ngn` far above what's actually funded. | The float ceiling is checked separately from `policy` in the decision engine's own signature — a bad policy value literally cannot authorize more than the real funded float. Proven under concurrency in `tests/test_ledger_concurrency.py` with a deliberately reckless policy. |
+| **Unauthenticated access to the gate itself** | Anyone who can reach the server calls `/intents` directly, no credential needed, and spends within whatever the policy allows. | Every route except `/health` and the token-based `/approvals/{token}/*` links requires an `X-API-Key` header matching `API_KEY`. An unset key fails closed — every request is rejected, never silently let through. See `app/auth.py`. |
 
 ## Status
 

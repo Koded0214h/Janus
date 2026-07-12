@@ -60,6 +60,19 @@ class PolicyResponse(BaseModel):
     velocity_window_seconds: int
 
 
+class PolicyRequest(BaseModel):
+    """Deliberately has no float_limit_ngn field — the float ceiling is independent of
+    policy by design (PRD §7.3) and is never settable through this endpoint."""
+
+    daily_cap_ngn: Decimal = Field(ge=0)
+    per_tx_cap_ngn: Decimal = Field(ge=0)
+    approval_threshold_ngn: Decimal = Field(ge=0)
+    allowed_categories: list[str] = Field(default_factory=list)
+    allowed_recipients: list[str] = Field(default_factory=list)
+    velocity_limit_count: int = Field(ge=0)
+    velocity_window_seconds: int = Field(gt=0)
+
+
 class AuditEntry(BaseModel):
     intent_id: int
     idempotency_key: str

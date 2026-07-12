@@ -34,26 +34,36 @@ def to_domain(model: PolicyModel) -> PolicyConfig:
 
 
 def get_active_policy(db: Session) -> PolicyConfig:
-    model = db.scalar(select(PolicyModel).where(PolicyModel.is_active.is_(True)).order_by(PolicyModel.version.desc()))
+    model = _active_model(db)
     if model is None:
-        model = seed_default_policy(db)
+        model = create_new_version(db, DEFAULT_POLICY)
     return to_domain(model)
 
 
-def seed_default_policy(db: Session) -> PolicyModel:
-    policy = DEFAULT_POLICY
+def create_new_version(db: Session, new_policy: PolicyConfig) -> PolicyModel:
+    """Inserts a new policy version and deactivates whatever was active before. Rows are
+    never updated in place — this is the only way policy is ever allowed to change."""
+    current = _active_model(db)
+    next_version = (current.version + 1) if current is not None else 1
+    if current is not None:
+        current.is_active = False
+
     model = PolicyModel(
-        version=policy.version,
-        daily_cap_ngn=policy.daily_cap_ngn,
-        per_tx_cap_ngn=policy.per_tx_cap_ngn,
-        approval_threshold_ngn=policy.approval_threshold_ngn,
-        allowed_categories=sorted(policy.allowed_categories),
-        allowed_recipients=sorted(policy.allowed_recipients),
-        velocity_limit_count=policy.velocity_limit_count,
-        velocity_window_seconds=policy.velocity_window_seconds,
+        version=next_version,
+        daily_cap_ngn=new_policy.daily_cap_ngn,
+        per_tx_cap_ngn=new_policy.per_tx_cap_ngn,
+        approval_threshold_ngn=new_policy.approval_threshold_ngn,
+        allowed_categories=sorted(new_policy.allowed_categories),
+        allowed_recipients=sorted(new_policy.allowed_recipients),
+        velocity_limit_count=new_policy.velocity_limit_count,
+        velocity_window_seconds=new_policy.velocity_window_seconds,
         is_active=True,
     )
     db.add(model)
     db.commit()
     db.refresh(model)
     return model
+
+
+def _active_model(db: Session) -> PolicyModel | None:
+    return db.scalar(select(PolicyModel).where(PolicyModel.is_active.is_(True)).order_by(PolicyModel.version.desc()))

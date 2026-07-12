@@ -16,12 +16,13 @@ pip install -r requirements.txt
 ```
 
 Requires a running Janus backend (see `../backend/README.md`). Set `JANUS_BASE_URL` if it's not
-on `http://localhost:8000`.
+on `http://localhost:8000`, and `JANUS_API_KEY` to match the backend's `API_KEY` — every route
+is auth-required now, so the tool 401s without it (it'll warn on startup if unset).
 
 ## Run
 
 ```bash
-python server.py
+JANUS_API_KEY=... python server.py
 ```
 
 This starts a stdio MCP server. Point an MCP client at it — for Claude Desktop / Claude Code,
@@ -33,7 +34,7 @@ add something like this to your MCP config:
     "janus": {
       "command": "/absolute/path/to/mcp_server/.venv/bin/python",
       "args": ["/absolute/path/to/mcp_server/server.py"],
-      "env": { "JANUS_BASE_URL": "http://localhost:8000" }
+      "env": { "JANUS_BASE_URL": "http://localhost:8000", "JANUS_API_KEY": "..." }
     }
   }
 }
@@ -47,7 +48,7 @@ agent only ever sees a final `"allowed"` or `"denied"`, never a dangling pending
 ## Quick smoke test without a real MCP client
 
 ```bash
-python -c "
+JANUS_API_KEY=... python -c "
 import server
 print(server.pay(
     amount_ngn=150, recipient='rider_1', category='delivery',

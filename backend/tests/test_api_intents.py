@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import sessionmaker
 
 from app.approvals.service import ApprovalService, resolve
+from app.auth import require_api_key
 from app.deps import get_approval_service, get_db, get_executor, get_ledger
 from app.domain import ApprovalOutcome, PaymentIntent
 from app.executors.base import Executor, TransferResult
@@ -50,6 +51,7 @@ def client_with_executor(db, ledger, should_succeed: bool, approval_service: App
     app.dependency_overrides[get_db] = lambda: db
     app.dependency_overrides[get_ledger] = lambda: ledger
     app.dependency_overrides[get_executor] = lambda: FakeExecutor(should_succeed=should_succeed)
+    app.dependency_overrides[require_api_key] = lambda: None  # auth mechanics covered separately in test_auth.py
     if approval_service is not None:
         app.dependency_overrides[get_approval_service] = lambda: approval_service
     return TestClient(app)
@@ -261,3 +263,35 @@ def test_needs_approval_times_out_to_deny(db, ledger, engine, redis_client):
 
     key = ledger._daily_key(datetime.now(UTC).date())
     assert redis_client.get(key) in (None, "0")
+
+
+def test_intents_route_actually_requires_the_api_key(db, ledger):
+    """Unlike every other test here, this one does NOT override require_api_key — the point
+    is to prove the real app rejects unauthenticated requests, not just that the dependency
+    function works in isolation (that's test_auth.py)."""
+    from app.config import Settings, get_settings
+
+    _seed_policy(db)
+    app.dependency_overrides[get_db] = lambda: db
+    app.dependency_overrides[get_ledger] = lambda: ledger
+    app.dependency_overrides[get_executor] = lambda: FakeExecutor(should_succeed=True)
+    app.dependency_overrides[get_settings] = lambda: Settings(api_key="test-key")
+    client = TestClient(app)
+
+    payload = {
+        "amount_ngn": "100",
+        "recipient": "rider_1",
+        "category": "delivery",
+        "reason": "auth test",
+        "idempotency_key": "auth-check-1",
+    }
+
+    no_key_response = client.post("/intents", json=payload)
+    wrong_key_response = client.post("/intents", json=payload, headers={"X-API-Key": "nope"})
+    right_key_response = client.post("/intents", json=payload, headers={"X-API-Key": "test-key"})
+
+    app.dependency_overrides.clear()
+
+    assert no_key_response.status_code == 401
+    assert wrong_key_response.status_code == 401
+    assert right_key_response.status_code == 200

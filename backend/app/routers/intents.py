@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.approvals.service import ApprovalService
+from app.auth import require_api_key
 from app.decision_engine import Verdict
 from app.deps import get_approval_service, get_db, get_executor, get_ledger
 from app.domain import ApprovalOutcome, Decision, PaymentIntent
@@ -11,7 +12,7 @@ from app.models import ApprovalModel, TransferModel
 from app.policy import get_active_policy
 from app.schemas import DecisionResponse, IntentRequest, Receipt, Status, status_for
 
-router = APIRouter(tags=["intents"])
+router = APIRouter(tags=["intents"], dependencies=[Depends(require_api_key)])
 
 
 @router.post("/intents", response_model=DecisionResponse)

@@ -9,6 +9,10 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://janus:janus@localhost:5432/janus"
     redis_url: str = "redis://localhost:6379/0"
 
+    api_key: str = ""
+    """Required on /intents, /policy, /audit via the X-API-Key header. Empty means every
+    protected request is rejected (fail closed) — this is not an opt-in."""
+
     paystack_secret_key: str = ""
     paystack_base_url: str = "https://api.paystack.co"
 

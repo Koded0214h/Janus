@@ -11,18 +11,24 @@ Run:
     python server.py
 
 Then point an MCP client at this as a stdio server. Set JANUS_BASE_URL if Janus isn't on the
-default localhost:8000.
+default localhost:8000, and JANUS_API_KEY to match the backend's API_KEY (required — every
+request 401s without it).
 """
 
 import os
+import sys
 
 import httpx
 from mcp.server.fastmcp import FastMCP
 
 JANUS_BASE_URL = os.environ.get("JANUS_BASE_URL", "http://localhost:8000")
+JANUS_API_KEY = os.environ.get("JANUS_API_KEY", "")
 # Longer than Janus's own APPROVAL_TIMEOUT_SECONDS (default 300s) — a needs_approval decision
 # blocks server-side for up to that long, and this client must not give up first.
 HTTP_TIMEOUT_SECONDS = float(os.environ.get("JANUS_HTTP_TIMEOUT_SECONDS", "310"))
+
+if not JANUS_API_KEY:
+    print("JANUS_API_KEY is not set — every call to the pay tool will 401.", file=sys.stderr)
 
 mcp = FastMCP("janus")
 
@@ -40,7 +46,9 @@ def pay(amount_ngn: float, recipient: str, category: str, reason: str, idempoten
     idempotency_key must be unique per real-world payment attempt — retrying with the same key
     is always safe and will never pay twice.
     """
-    with httpx.Client(base_url=JANUS_BASE_URL, timeout=HTTP_TIMEOUT_SECONDS) as client:
+    with httpx.Client(
+        base_url=JANUS_BASE_URL, timeout=HTTP_TIMEOUT_SECONDS, headers={"X-API-Key": JANUS_API_KEY}
+    ) as client:
         response = client.post(
             "/intents",
             json={
