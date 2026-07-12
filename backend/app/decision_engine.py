@@ -1,13 +1,19 @@
-"""The gate. A pure function: (intent, policy, spend_state) -> Decision.
+"""The gate. A pure function: (intent, policy, spend_state, float_limit_ngn) -> Decision.
 
 No database, no network, no clock reads beyond what's passed in. This is deliberate —
 every branch here must be provable with a unit test and nothing else.
+
+float_limit_ngn is passed separately from policy on purpose: it is the hard backstop
+that must hold even when the policy itself is misconfigured (PRD non-negotiable #3),
+so it cannot be something a bad policy value could ever loosen.
 """
+
+from decimal import Decimal
 
 from app.domain import Decision, PaymentIntent, PolicyConfig, SpendState, Verdict
 
 
-def evaluate(intent: PaymentIntent, policy: PolicyConfig, spend: SpendState) -> Decision:
+def evaluate(intent: PaymentIntent, policy: PolicyConfig, spend: SpendState, float_limit_ngn: Decimal) -> Decision:
     if intent.category not in policy.allowed_categories:
         return _deny(policy, f"category '{intent.category}' is not on the allowed list")
 
@@ -18,6 +24,13 @@ def evaluate(intent: PaymentIntent, policy: PolicyConfig, spend: SpendState) -> 
         return _deny(
             policy,
             f"amount {intent.amount_ngn} exceeds per-transaction cap {policy.per_tx_cap_ngn}",
+        )
+
+    if spend.float_total_ngn + intent.amount_ngn > float_limit_ngn:
+        return _deny(
+            policy,
+            f"amount {intent.amount_ngn} would exceed the hard float ceiling {float_limit_ngn} "
+            "(independent of policy — top up the float and reset the counter)",
         )
 
     if spend.daily_total_ngn + intent.amount_ngn > policy.daily_cap_ngn:

@@ -21,6 +21,7 @@ from app.models import DecisionModel, IntentModel
 _RESERVE_SCRIPT = """
 local daily_key = KEYS[1]
 local velocity_key = KEYS[2]
+local float_key = KEYS[3]
 local amount = tonumber(ARGV[1])
 local daily_cap = tonumber(ARGV[2])
 local velocity_limit = tonumber(ARGV[3])
@@ -28,35 +29,43 @@ local window_seconds = tonumber(ARGV[4])
 local now_ms = tonumber(ARGV[5])
 local member = ARGV[6]
 local daily_ttl = tonumber(ARGV[7])
+local float_limit = tonumber(ARGV[8])
 
 redis.call('ZREMRANGEBYSCORE', velocity_key, '-inf', now_ms - (window_seconds * 1000))
 
 local daily_total = tonumber(redis.call('GET', daily_key) or "0")
 local velocity_count = redis.call('ZCARD', velocity_key)
+local float_total = tonumber(redis.call('GET', float_key) or "0")
 
 local exceeds_daily = (daily_total + amount) > daily_cap
 local exceeds_velocity = velocity_count >= velocity_limit
+local exceeds_float = (float_total + amount) > float_limit
 
-if exceeds_daily or exceeds_velocity then
-  return {tostring(daily_total), tostring(velocity_count), 0}
+if exceeds_daily or exceeds_velocity or exceeds_float then
+  return {tostring(daily_total), tostring(velocity_count), tostring(float_total), 0}
 end
 
 redis.call('INCRBYFLOAT', daily_key, amount)
 redis.call('EXPIRE', daily_key, daily_ttl)
 redis.call('ZADD', velocity_key, now_ms, member)
 redis.call('EXPIRE', velocity_key, window_seconds + 60)
+redis.call('INCRBYFLOAT', float_key, amount)
+-- float_key deliberately has no EXPIRE: it's a standing ceiling, only ever reset
+-- by hand when the operator tops up the real funded float.
 
-return {tostring(daily_total), tostring(velocity_count), 1}
+return {tostring(daily_total), tostring(velocity_count), tostring(float_total), 1}
 """
 
 _ROLLBACK_SCRIPT = """
 local daily_key = KEYS[1]
 local velocity_key = KEYS[2]
+local float_key = KEYS[3]
 local amount = tonumber(ARGV[1])
 local member = ARGV[2]
 
 redis.call('INCRBYFLOAT', daily_key, -amount)
 redis.call('ZREM', velocity_key, member)
+redis.call('INCRBYFLOAT', float_key, -amount)
 return redis.status_reply('OK')
 """
 
@@ -71,8 +80,9 @@ class ProcessResult:
 
 
 class SpendLedger:
-    def __init__(self, redis_client: redis.Redis):
+    def __init__(self, redis_client: redis.Redis, float_limit_ngn: Decimal):
         self._redis = redis_client
+        self._float_limit_ngn = float_limit_ngn
         self._reserve = redis_client.register_script(_RESERVE_SCRIPT)
         self._rollback = redis_client.register_script(_ROLLBACK_SCRIPT)
 
@@ -84,15 +94,28 @@ class SpendLedger:
     def _velocity_key() -> str:
         return "janus:spend:velocity"
 
+    @staticmethod
+    def _float_key() -> str:
+        return "janus:spend:float_total"
+
+    def current_daily_total(self) -> Decimal:
+        value = self._redis.get(self._daily_key(datetime.now(UTC).date()))
+        return Decimal(value) if value else Decimal("0")
+
+    def current_float_total(self) -> Decimal:
+        value = self._redis.get(self._float_key())
+        return Decimal(value) if value else Decimal("0")
+
     def _reserve_budget(self, intent: PaymentIntent, policy: PolicyConfig) -> tuple[SpendState, bool]:
-        """Atomically reserves daily-cap + velocity budget iff both currently allow it.
+        """Atomically reserves daily-cap + velocity + float-ceiling budget iff all three
+        currently allow it.
 
         Returns the spend snapshot *before* this reservation (what the decision engine
         should evaluate against) and whether the reservation was granted.
         """
         now_ms = datetime.now(UTC).timestamp() * 1000
-        daily_total_str, velocity_count_str, reserved = self._reserve(
-            keys=[self._daily_key(datetime.now(UTC).date()), self._velocity_key()],
+        daily_total_str, velocity_count_str, float_total_str, reserved = self._reserve(
+            keys=[self._daily_key(datetime.now(UTC).date()), self._velocity_key(), self._float_key()],
             args=[
                 str(intent.amount_ngn),
                 str(policy.daily_cap_ngn),
@@ -101,11 +124,13 @@ class SpendLedger:
                 now_ms,
                 intent.idempotency_key,
                 60 * 60 * 25,  # daily key TTL: a bit over a day, so it self-expires
+                str(self._float_limit_ngn),
             ],
         )
         spend_state = SpendState(
             daily_total_ngn=Decimal(daily_total_str),
             velocity_count=int(velocity_count_str),
+            float_total_ngn=Decimal(float_total_str),
         )
         return spend_state, bool(reserved)
 
@@ -114,7 +139,7 @@ class SpendLedger:
         but the executor then failed to actually move the money (e.g. Paystack rejected it) —
         the reservation must be released so the failed attempt doesn't count against the cap."""
         self._rollback(
-            keys=[self._daily_key(datetime.now(UTC).date()), self._velocity_key()],
+            keys=[self._daily_key(datetime.now(UTC).date()), self._velocity_key(), self._float_key()],
             args=[str(intent.amount_ngn), intent.idempotency_key],
         )
 
@@ -130,7 +155,7 @@ class SpendLedger:
             )
 
         spend_state, reserved = self._reserve_budget(intent, policy)
-        decision = evaluate(intent, policy, spend_state)
+        decision = evaluate(intent, policy, spend_state, self._float_limit_ngn)
 
         if decision.verdict != Verdict.ALLOW and reserved:
             self.rollback_reservation(intent)

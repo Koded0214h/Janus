@@ -1,265 +1,159 @@
 # Janus
 
-> **A programmable trust layer for autonomous payments.**
+**A programmable trust layer that sits between an AI agent and a payment rail, and answers one question: is this payment allowed, right now, under the rules I set?**
 
-Janus sits between software and a payment rail, answering one question before money moves:
+Allow. Deny. Or ask me first. That is the entire product.
 
-> **Is this payment allowed?**
+Built naira-first, for the corner of agentic payments the global players have written off: African fiat, real bank transfers over NIP, starting on Paystack.
 
-Not **can** it be paid. **Should** it be paid.
-
-Everything else is implementation.
+Janus is named for the Roman god of gates and doorways, the one with two faces looking in opposite directions. That is literally what this is: a gate that faces the agent on one side and you on the other.
 
 ---
 
-## Why Janus exists
+## The problem
 
-Software is getting good enough to spend money.
+Software is getting good enough to spend money on your behalf. The hard part was never giving software a way to pay, Paystack and every bank already expose that over an API. The hard part is making sure it only spends what you allowed, on what you allowed, up to the limit you allowed, and that a retry or a bug or a manipulated prompt can't quietly drain you.
 
-AI agents can already:
+That missing piece is not a payment API. It is programmable trust. Janus is only that piece.
 
-* book flights
-* order food
-* pay invoices
-* renew subscriptions
-* call APIs
+## Where you've already seen this idea
 
-Giving software a way to pay isn't the hard part. Banks already expose APIs. Payment providers already expose APIs.
+If you're in Nigeria, Paystack Index is the consumer version of this future: you let an AI assistant buy airtime, send money through Zap, or order food on Chowdeck, and it acts within permissions and spending limits you set. Janus is the developer's version of that control layer. It is the self-hosted gate you put in front of your own agent so it can pay on a live rail without being dangerous, with the limits, approvals, and audit trail you'd want before you ever switched it on.
 
-The difficult problem is authorization. How do you let software spend money...
+## What Janus is
 
-* only within a budget,
-* only for approved categories,
-* only to trusted recipients,
-* while keeping a complete audit trail,
-* and without risking your primary account?
+Janus is a paying proxy with a policy gate in front of it. An agent hands Janus a payment intent. Janus checks it against your rules, and only if every rule passes does it execute a real transfer through a fiat rail from a small, deliberately funded float. Every decision, allowed or denied, is written to an append-only audit log with the reason and, when a payment happens, the rail's reference.
 
-That's the problem Janus solves.
+Three things make it real rather than a toy:
 
----
+1. **It moves real money.** Payments settle as real naira bank transfers through Paystack. Not mocked, not simulated.
+2. **The blast radius is capped by design.** The agent never touches your main account. Janus disburses only from a small pre-funded float, so the worst case is the float, not your money.
+3. **The correctness layer is the point.** Atomic budget accounting, idempotency keys, and a clean decision state machine are what let real money move safely under retries and concurrency. That is the interesting engineering.
 
-## The philosophy
+## What Janus is NOT
 
-Janus doesn't replace your bank. Janus doesn't replace Paystack. Janus doesn't replace your wallet.
+This list exists so the project never spirals into four products again.
 
-Janus decides whether a payment should happen before it reaches them. Think of it as IAM for money.
+- **Not a yield optimizer.** It does not decide where your money should go to earn more.
+- **Not an identity or proof-of-personhood system.** No ZK, no age-proofs.
+- **Not a breach-detection or auto-vaulting service.**
+- **Not a bank or a custodian.** Janus holds one thing: access to a small float you funded, plus the rules for spending it. The moment it reaches to manage your real balance, it has rebuilt the thing that killed v1.
+
+## How it works
+
+![Janus system architecture: an agent sends a payment intent to Janus, which routes through a decision engine, spend ledger, and approval channel, then an agnostic payment rail (executor, NIP transfer, bank) before writing to an append-only audit log.](sys_arch.png)
 
 ```
-Software
-   │
-   ▼
-Payment Intent
-   │
-   ▼
-   Janus
-   │
-   ▼
-ALLOW / DENY / ASK
-   │
-   ▼
-Payment Rail
+        payment intent                     allow / deny / ask
+  Agent ───────────────►  Janus  ─────────────────────────────►  Agent
+                            │
+              ┌─────────────┼──────────────┐
+              ▼             ▼              ▼
+        Decision       Spend Ledger    Approval
+         Engine      (atomic budget,   (Telegram,
+      (your rules)    idempotency)    SMS later)
+                            │
+                            ▼ on ALLOW
+              Agnostic Payment Rail: Executor ──► NIP transfer ──► recipient bank account
+                            │
+                            ▼
+                 Append-only audit log (decision + reason + transfer ref)
 ```
 
-That's the entire product.
+1. The agent sends an intent: `{ amount_ngn, recipient, category, reason, idempotency_key }`.
+2. The **decision engine** evaluates it against your policy plus current spend and returns `allowed`, `denied`, or `needs_approval`, each with a reason.
+3. On `needs_approval`, the **approval channel** pings your phone over Telegram (SMS is a later option) and blocks until you tap yes or no, or it times out to deny.
+4. On `allowed`, the **executor** performs the real transfer from the float and returns the receipt. This is the only rail-aware piece — Paystack today, others drop in behind the same interface later.
+5. The **spend ledger** decrements the budget atomically and records everything. Idempotency keys guarantee a retried intent can't pay twice.
 
----
+## The one call a developer makes
 
-## Core principles
-
-Janus follows four principles.
-
-### 1. Trust is programmable.
-
-Permissions shouldn't live inside application code. They should be policies.
-
-### 2. Money moves through intent.
-
-Software shouldn't call:
+The agent never calls Paystack. It calls Janus, ideally as a single MCP tool named `pay`, so any agent framework picks it up as a tool the LLM can invoke.
 
 ```python
-pay()
+decision = janus.pay(
+    amount_ngn=150,
+    recipient="0123456789@Access",
+    category="vendor-payout",
+    reason="Groundnut supplier, order #A12",
+    idempotency_key="order-A12-payout",
+)
+# decision.status -> "allowed" | "denied" | "needs_approval"
 ```
 
-It should submit an intent:
+The mental model for the developer: give your agent a `pay` tool that physically cannot overspend.
 
-```python
+## Trust model in one sentence
+
+Janus can only spend from a float you funded with a small amount, strictly inside rules you set, and it logs every decision, so the most it can ever cost you is the float.
+
+## Tech stack
+
+- **Python + FastAPI** for the gate service.
+- **PostgreSQL** for policies and the durable audit trail.
+- **Redis** for atomic spend counters and velocity windows.
+- **Paystack API** (Transfers) as the local rail, settling **naira over NIP**. The executor is an interface, so Stripe (international) or x402 (borderless) drop in later without touching the gate.
+- **Telegram Bot API** for approvals (reuses the KODED OS bot).
+- **Docker Compose** for local bring-up.
+
+## Quickstart
+
+> Build against Paystack **test mode** first. Real API, test keys, no real money. Flip to live only once the gate is proven.
+
+```bash
+git clone https://github.com/koded0214h/janus.git
+cd janus
+uv add fastapi uvicorn httpx redis "psycopg[binary]"
+cp .env.example .env
+docker compose up -d postgres redis
+uvicorn janus.main:app --reload
+```
+
+`.env` (test phase):
+
+```env
+JANUS_MODE=test
+PAYSTACK_SECRET_KEY=sk_test_...
+FLOAT_LIMIT_NGN=2000
+DATABASE_URL=postgresql://janus:janus@localhost:5432/janus
+REDIS_URL=redis://localhost:6379/0
+TELEGRAM_BOT_TOKEN=...
+TELEGRAM_CHAT_ID=...
+```
+
+Live cutover: swap in `sk_live_...`, fund the Paystack balance with a small real float (start at ₦2,000), and pre-create your allowlisted recipients. Nothing in the gate changes.
+
+> **Honest dependency:** live Paystack transfers need a verified business and recipients created ahead of time, and may prompt an OTP depending on your settings. Sort that once, and real money is a config flip.
+
+## Policy example
+
+Declarative JSON, evaluated top to bottom. This is your standing authorization, the scope you sign once.
+
+```json
 {
-    amount,
-    recipient,
-    reason,
-    category
+  "daily_cap_ngn": 2000,
+  "per_tx_cap_ngn": 200,
+  "approval_threshold_ngn": 200,
+  "allowed_categories": ["airtime", "data", "vendor-payout", "delivery"],
+  "allowed_recipients": ["0123456789@Access", "9876543210@GTB"],
+  "velocity": { "max_tx": 20, "window_seconds": 60 }
 }
 ```
 
-Janus decides the rest.
+## The demo
 
-### 3. The payment rail is replaceable.
+An agent runs errands. Small payouts sail through (₦150 to a known vendor). A transfer over the per-tx cap fires a Telegram ping you approve or deny in real time. A transfer to an account not on the allowlist is auto-denied with a printed reason. Hit the daily cap and everything locks. The audit log shows every decision and why, each allowed transfer carrying its real Paystack reference, and the money actually lands.
 
-Today: Paystack, NIP.
+That two-minute demo is the thesis running live: not making payments autonomous, making autonomous payments trustworthy.
 
-Tomorrow: Stripe, Flutterwave, Squad, Stablecoins, AP2, MPP.
+## Scale and security, kept honest
 
-Janus doesn't care.
-
-### 4. Correctness is the product.
-
-Anyone can integrate a payment API. The interesting engineering starts after that:
-
-* atomic budgets
-* idempotency
-* retries
-* race conditions
-* deterministic policy evaluation
-* auditability
-
-That's where Janus lives.
-
----
-
-## Architecture
-
-```
-                    Payment Intent
-                           │
-                           ▼
-                    Policy Engine
-                           │
-        ┌──────────────────┼──────────────────┐
-        ▼                  ▼                  ▼
-    Budget Check      Recipient Check    Approval Rules
-        │                  │                  │
-        └──────────────────┼──────────────────┘
-                           ▼
-                  Authorization Decision
-                   ALLOW / DENY / ASK
-                           │
-                 ┌─────────┴──────────┐
-                 ▼                    ▼
-         Human Approval        Payment Executor
-                                      │
-                                      ▼
-                                Payment Rail
-                                      │
-                                      ▼
-                               Audit Log
-```
-
----
-
-## Example
-
-An AI assistant wants to pay ₦150 to a known delivery rider.
-
-Janus evaluates:
-
-* ✅ Daily budget available
-* ✅ Recipient allow-listed
-* ✅ Category allowed
-* ✅ Under approval threshold
-
-Decision: **ALLOW**. The payment executes. The audit log records why.
-
----
-
-The same assistant now attempts to send ₦5,000.
-
-Janus evaluates:
-
-* ❌ Above approval threshold
-
-Decision: **ASK**. A Telegram notification appears. Nothing moves until you approve it.
-
----
-
-Now it tries sending money to an unknown account.
-
-Decision: **DENY**. The payment never reaches the payment provider.
-
----
-
-## Features
-
-* Policy-based payment authorization
-* Budget enforcement
-* Recipient allowlists
-* Category restrictions
-* Human approval workflows
-* Velocity limiting
-* Idempotent execution
-* Atomic spend accounting
-* Immutable audit logs
-* Pluggable payment executors
-
----
-
-## Current implementation
-
-Current payment executor:
-
-* Paystack Transfers
-* Nigerian NIP settlement
-
-Planned executors:
-
-* Stripe
-* Flutterwave
-* Squad
-* AP2
-* MPP
-
----
-
-## Tech Stack
-
-* FastAPI
-* PostgreSQL
-* Redis
-* Docker
-* Telegram Bot API
-* Paystack
-
----
-
-## Roadmap
-
-### Phase 1
-
-* Policy engine
-* Spend ledger
-* Paystack executor
-* Telegram approvals
-
-### Phase 2
-
-* Pluggable executors
-* Multi-user policies
-* Web dashboard
-
-### Phase 3
-
-* AP2 support
-* MPP support
-* Machine identity
-* SDKs
-
----
-
-## Inspiration
-
-Janus was inspired by a simple observation:
-
-> AI doesn't need more ways to pay. It needs better ways to ask permission.
-
-Recent work around Google's **AP2 (Agent Payments Protocol)** and **MPP (Machine Payments Protocol)** points in the same direction: separating **authorization** from **settlement**.
-
-Janus explores that idea today using existing payment rails.
-
----
+"Built for scale" here means the decision path is stateless and the ledger stays correct under concurrent load, proven with one load test. "Secure" means the float cap holds independently of policy, secrets live only in env, and the audit log cannot be edited in place, backed by one short threat model in the docs. It does not mean multi-tenancy, dashboards, or a pile of infra nobody asked for. The scalable, secure version of Janus is still just the gate.
 
 ## Status
 
-🚧 Early development.
+Deliberate rebuild. Full spec, milestones, and notes in [PRD.md](./PRD.md). A [Koded Labs](https://kodedlabs.com) project.
 
-The goal isn't to build another payment gateway. The goal is to build the trust layer that sits in front of one.
+## Disclaimer
 
-See [PRD.md](PRD.md) for the full product requirements and build plan. Earlier Solana/Drift/Ika prototype work has been moved to [`legacy/`](legacy/).
+Janus moves real funds through a live payment provider. Experimental software, not financial or security advice. Small float, keys out of git, and remember that bank transfers are not easily reversed.

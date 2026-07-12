@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from fastapi import Depends
 
 from app.config import Settings, get_settings
@@ -10,8 +12,8 @@ from app.redis_client import get_redis
 __all__ = ["get_db", "get_settings", "get_ledger", "get_executor"]
 
 
-def get_ledger() -> SpendLedger:
-    return SpendLedger(get_redis())
+def get_ledger(settings: Settings = Depends(get_settings)) -> SpendLedger:
+    return SpendLedger(get_redis(), Decimal(settings.float_limit_ngn))
 
 
 def get_executor(settings: Settings = Depends(get_settings)) -> Executor:

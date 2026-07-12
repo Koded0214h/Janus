@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from decimal import Decimal
 
 from fastapi.testclient import TestClient
 
@@ -65,9 +66,10 @@ def test_successful_transfer_keeps_the_reservation(db, ledger, redis_client):
 
     assert response.status_code == 200
     body = response.json()
-    assert body["verdict"] == "allow"
-    assert body["transfer"]["status"] == "success"
-    assert body["transfer"]["reference"] == "ref-api-success-1"
+    assert body["status"] == "allowed"
+    assert body["receipt"]["status"] == "success"
+    assert body["receipt"]["rail_reference"] == "ref-api-success-1"
+    assert body["remaining_daily_ngn"] == "850.00"  # 1000 daily cap - 150 spent
 
     key = ledger._daily_key(datetime.now(UTC).date())
     assert redis_client.get(key) == "150"
@@ -91,8 +93,8 @@ def test_failed_transfer_rolls_back_the_reservation(db, ledger, redis_client):
 
     assert response.status_code == 200
     body = response.json()
-    assert body["verdict"] == "allow"  # the decision was correct, the rail is what failed
-    assert body["transfer"]["status"] == "failed"
+    assert body["status"] == "allowed"  # the decision was correct, the rail is what failed
+    assert body["receipt"]["status"] == "failed"
 
     key = ledger._daily_key(datetime.now(UTC).date())
     assert redis_client.get(key) in (None, "0")
@@ -113,8 +115,32 @@ def test_replay_returns_the_same_transfer_reference(db, ledger, redis_client):
     second = client.post("/intents", json=payload).json()
     app.dependency_overrides.clear()
 
-    assert first["transfer"]["reference"] == second["transfer"]["reference"]
+    assert first["receipt"]["rail_reference"] == second["receipt"]["rail_reference"]
     assert second["is_replay"] is True
 
     key = ledger._daily_key(datetime.now(UTC).date())
     assert redis_client.get(key) == "150"  # replay never spends a second time
+
+
+def test_float_ceiling_denies_even_when_policy_would_allow(db, ledger_factory, redis_client):
+    _seed_policy(db)  # daily_cap_ngn=1000, well above the tiny float limit below
+    tiny_float_ledger = ledger_factory(Decimal("100"))
+    client = client_with_executor(db, tiny_float_ledger, should_succeed=True)
+
+    response = client.post(
+        "/intents",
+        json={
+            "amount_ngn": "150",
+            "recipient": "rider_1",
+            "category": "delivery",
+            "reason": "delivery fee",
+            "idempotency_key": "api-float-ceiling-1",
+        },
+    )
+    app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "denied"
+    assert "float ceiling" in body["reason"]
+    assert body["receipt"] is None

@@ -1,9 +1,24 @@
 from datetime import datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
 from app.domain import Verdict
+
+# Wire contract per PRD §8 — deliberately worded differently from the internal Verdict
+# enum (allow/deny) so the domain layer stays decoupled from the API's past-tense phrasing.
+Status = Literal["allowed", "denied", "needs_approval"]
+
+_STATUS_BY_VERDICT: dict[Verdict, Status] = {
+    Verdict.ALLOW: "allowed",
+    Verdict.DENY: "denied",
+    Verdict.NEEDS_APPROVAL: "needs_approval",
+}
+
+
+def status_for(verdict: Verdict) -> Status:
+    return _STATUS_BY_VERDICT[verdict]
 
 
 class IntentRequest(BaseModel):
@@ -14,18 +29,24 @@ class IntentRequest(BaseModel):
     idempotency_key: str = Field(min_length=1, max_length=255)
 
 
-class TransferInfo(BaseModel):
-    reference: str | None
+class Receipt(BaseModel):
+    rail: str
+    rail_reference: str | None
+    amount_ngn: Decimal
     status: str
 
 
 class DecisionResponse(BaseModel):
-    verdict: Verdict
+    id: str
+    status: Status
     reason: str
     policy_version: int
     evaluated_at: datetime
     is_replay: bool
-    transfer: TransferInfo | None = None
+    remaining_daily_ngn: Decimal
+    receipt: Receipt | None = None
+    approval_url: str | None = None
+    expires_at: datetime | None = None
 
 
 class PolicyResponse(BaseModel):

@@ -45,7 +45,18 @@ def redis_client() -> Generator[redis.Redis, None, None]:
 
 @pytest.fixture
 def ledger(redis_client) -> SpendLedger:
-    return SpendLedger(redis_client)
+    # Large enough to never bind unless a test specifically exercises the float ceiling.
+    return SpendLedger(redis_client, float_limit_ngn=Decimal("1000000"))
+
+
+@pytest.fixture
+def ledger_factory(redis_client):
+    """For tests that need a specific float_limit_ngn instead of the default large one."""
+
+    def _make(float_limit_ngn: Decimal) -> SpendLedger:
+        return SpendLedger(redis_client, float_limit_ngn=float_limit_ngn)
+
+    return _make
 
 
 @pytest.fixture

@@ -48,6 +48,9 @@ class SpendState:
 
     daily_total_ngn: Decimal
     velocity_count: int
+    float_total_ngn: Decimal
+    """Cumulative amount ever disbursed against the standing float, independent of policy
+    and never reset automatically — only when the operator tops up the funded float."""
 
 
 @dataclass(frozen=True)

@@ -11,7 +11,7 @@ from decimal import Decimal
 
 from sqlalchemy.orm import sessionmaker
 
-from app.domain import PaymentIntent, Verdict
+from app.domain import PaymentIntent, PolicyConfig, Verdict
 from app.ledger import SpendLedger
 
 
@@ -82,3 +82,31 @@ def test_rollback_releases_budget_for_reuse(db, ledger, policy):
     # the rejected attempt must not have consumed any of the daily budget
     ok_result = ledger.process_intent(db, make_intent("good-one", "1000"), policy)
     assert ok_result.decision.verdict == Verdict.ALLOW
+
+
+def test_float_ceiling_holds_under_concurrency_even_with_a_misconfigured_policy(engine, ledger_factory):
+    """PRD non-negotiable #3: the float ceiling must hold independently of policy. Give the
+    policy a daily cap far above the float limit and prove the float still caps total spend."""
+    reckless_policy = PolicyConfig(
+        version=1,
+        daily_cap_ngn=Decimal("1000000"),  # deliberately far above the float limit below
+        per_tx_cap_ngn=Decimal("1000000"),
+        approval_threshold_ngn=Decimal("1000000"),
+        allowed_categories=frozenset({"delivery"}),
+        allowed_recipients=frozenset({"rider_1"}),
+        velocity_limit_count=1000,
+        velocity_window_seconds=3600,
+    )
+    tiny_float_ledger = ledger_factory(Decimal("500"))
+    session_factory = sessionmaker(bind=engine)
+
+    def submit(i):
+        with session_factory() as db:
+            return tiny_float_ledger.process_intent(db, make_intent(f"float-key-{i}", "100"), reckless_policy)
+
+    with ThreadPoolExecutor(max_workers=20) as pool:
+        results = list(pool.map(submit, range(20)))
+
+    allowed = [r for r in results if r.decision.verdict == Verdict.ALLOW]
+    assert len(allowed) == 5  # 500 float / 100 per intent — the daily cap of 1,000,000 never gets a say
+    assert tiny_float_ledger.current_float_total() == Decimal("500")

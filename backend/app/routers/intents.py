@@ -8,7 +8,7 @@ from app.executors.base import Executor
 from app.ledger import SpendLedger
 from app.models import TransferModel
 from app.policy import get_active_policy
-from app.schemas import DecisionResponse, IntentRequest, TransferInfo
+from app.schemas import DecisionResponse, IntentRequest, Receipt, status_for
 
 router = APIRouter(tags=["intents"])
 
@@ -30,12 +30,17 @@ def submit_intent(
     policy = get_active_policy(db)
     result = ledger.process_intent(db, intent, policy)
 
-    transfer_info: TransferInfo | None = None
+    receipt: Receipt | None = None
 
     if result.is_replay:
         existing_transfer = db.query(TransferModel).filter_by(decision_id=result.decision_model.id).one_or_none()
         if existing_transfer is not None:
-            transfer_info = TransferInfo(reference=existing_transfer.rail_reference, status=existing_transfer.status)
+            receipt = Receipt(
+                rail=existing_transfer.rail,
+                rail_reference=existing_transfer.rail_reference,
+                amount_ngn=existing_transfer.amount_ngn,
+                status=existing_transfer.status,
+            )
     elif result.decision.verdict == Verdict.ALLOW:
         transfer_result = executor.execute(intent)
 
@@ -52,13 +57,20 @@ def submit_intent(
         db.add(transfer_model)
         db.commit()
 
-        transfer_info = TransferInfo(reference=transfer_result.reference, status=transfer_result.status)
+        receipt = Receipt(
+            rail=transfer_result.rail,
+            rail_reference=transfer_result.reference,
+            amount_ngn=intent.amount_ngn,
+            status=transfer_result.status,
+        )
 
     return DecisionResponse(
-        verdict=result.decision.verdict,
+        id=f"dec_{result.decision_model.id}",
+        status=status_for(result.decision.verdict),
         reason=result.decision.reason,
         policy_version=result.decision.policy_version,
         evaluated_at=result.decision.evaluated_at,
         is_replay=result.is_replay,
-        transfer=transfer_info,
+        remaining_daily_ngn=policy.daily_cap_ngn - ledger.current_daily_total(),
+        receipt=receipt,
     )
