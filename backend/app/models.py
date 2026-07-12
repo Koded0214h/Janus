@@ -12,7 +12,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
-from app.domain import Verdict
+from app.domain import ApprovalOutcome, Verdict
 
 
 class PolicyModel(Base):
@@ -60,6 +60,7 @@ class DecisionModel(Base):
 
     intent: Mapped["IntentModel"] = relationship(back_populates="decision")
     transfer: Mapped["TransferModel | None"] = relationship(back_populates="decision", uselist=False)
+    approval: Mapped["ApprovalModel | None"] = relationship(back_populates="decision", uselist=False)
 
 
 class TransferModel(Base):
@@ -75,3 +76,23 @@ class TransferModel(Base):
     settled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     decision: Mapped["DecisionModel"] = relationship(back_populates="transfer")
+
+
+class ApprovalModel(Base):
+    """Tracks human-in-the-loop resolution for a needs_approval decision. Kept separate from
+    DecisionModel so the original engine verdict stays immutable — this row is the append-only
+    record of what happened *after* the engine asked for a human."""
+
+    __tablename__ = "approvals"
+    __table_args__ = (UniqueConstraint("decision_id", name="uq_approval_decision"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    decision_id: Mapped[int] = mapped_column(ForeignKey("decisions.id"))
+    token: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    status: Mapped[ApprovalOutcome] = mapped_column(String(20), default=ApprovalOutcome.PENDING)
+    channel: Mapped[str] = mapped_column(String(20))
+    requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    decision: Mapped["DecisionModel"] = relationship(back_populates="approval")

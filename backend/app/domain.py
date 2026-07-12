@@ -15,6 +15,14 @@ class Verdict(StrEnum):
     NEEDS_APPROVAL = "needs_approval"
 
 
+class ApprovalOutcome(StrEnum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    DENIED = "denied"
+    EXPIRED = "expired"
+    """Timed out without a reply — treated the same as DENIED by the caller (deny-on-timeout)."""
+
+
 @dataclass(frozen=True)
 class PaymentIntent:
     amount_ngn: Decimal

@@ -110,3 +110,26 @@ def test_float_ceiling_holds_under_concurrency_even_with_a_misconfigured_policy(
     allowed = [r for r in results if r.decision.verdict == Verdict.ALLOW]
     assert len(allowed) == 5  # 500 float / 100 per intent — the daily cap of 1,000,000 never gets a say
     assert tiny_float_ledger.current_float_total() == Decimal("500")
+
+
+def test_needs_approval_holds_the_reservation_instead_of_releasing_it(db, ledger):
+    """Unlike DENY, a needs_approval verdict must NOT release its budget reservation
+    immediately — a human hasn't ruled yet, and it might still be approved."""
+    approval_policy = PolicyConfig(
+        version=1,
+        daily_cap_ngn=Decimal("2000"),
+        per_tx_cap_ngn=Decimal("2000"),
+        approval_threshold_ngn=Decimal("100"),  # low, so a 750 intent needs approval
+        allowed_categories=frozenset({"delivery"}),
+        allowed_recipients=frozenset({"rider_1"}),
+        velocity_limit_count=1000,
+        velocity_window_seconds=3600,
+    )
+    result = ledger.process_intent(db, make_intent("needs-approval-hold", "750"), approval_policy)
+
+    assert result.decision.verdict == Verdict.NEEDS_APPROVAL
+    assert current_daily_total(ledger) == Decimal("750")  # held, not released
+
+    # simulating the eventual "denied" resolution releasing it
+    ledger.rollback_reservation(make_intent("needs-approval-hold", "750"))
+    assert current_daily_total(ledger) == Decimal("0")

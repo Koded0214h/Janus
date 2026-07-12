@@ -43,26 +43,10 @@ This list exists so the project never spirals into four products again.
 
 ![Janus system architecture: an agent sends a payment intent to Janus, which routes through a decision engine, spend ledger, and approval channel, then an agnostic payment rail (executor, NIP transfer, bank) before writing to an append-only audit log.](sys_arch.png)
 
-```
-        payment intent                     allow / deny / ask
-  Agent ───────────────►  Janus  ─────────────────────────────►  Agent
-                            │
-              ┌─────────────┼──────────────┐
-              ▼             ▼              ▼
-        Decision       Spend Ledger    Approval
-         Engine      (atomic budget,   (Telegram,
-      (your rules)    idempotency)    SMS later)
-                            │
-                            ▼ on ALLOW
-              Agnostic Payment Rail: Executor ──► NIP transfer ──► recipient bank account
-                            │
-                            ▼
-                 Append-only audit log (decision + reason + transfer ref)
-```
 
 1. The agent sends an intent: `{ amount_ngn, recipient, category, reason, idempotency_key }`.
 2. The **decision engine** evaluates it against your policy plus current spend and returns `allowed`, `denied`, or `needs_approval`, each with a reason.
-3. On `needs_approval`, the **approval channel** pings your phone over Telegram (SMS is a later option) and blocks until you tap yes or no, or it times out to deny.
+3. On `needs_approval`, the **approval channel** emails you a link to approve or deny and blocks until you click one, or it times out to deny. Email is the working channel for now; Telegram and SMS are documented as later options, wired as a stub interface today.
 4. On `allowed`, the **executor** performs the real transfer from the float and returns the receipt. This is the only rail-aware piece — Paystack today, others drop in behind the same interface later.
 5. The **spend ledger** decrements the budget atomically and records everything. Idempotency keys guarantee a retried intent can't pay twice.
 
@@ -93,7 +77,7 @@ Janus can only spend from a float you funded with a small amount, strictly insid
 - **PostgreSQL** for policies and the durable audit trail.
 - **Redis** for atomic spend counters and velocity windows.
 - **Paystack API** (Transfers) as the local rail, settling **naira over NIP**. The executor is an interface, so Stripe (international) or x402 (borderless) drop in later without touching the gate.
-- **Telegram Bot API** for approvals (reuses the KODED OS bot).
+- **Gmail SMTP** for approvals today (stdlib `smtplib`, no new dependency); Telegram Bot API is the documented next channel, stubbed but not wired.
 - **Docker Compose** for local bring-up.
 
 ## Quickstart
@@ -102,21 +86,26 @@ Janus can only spend from a float you funded with a small amount, strictly insid
 
 ```bash
 git clone https://github.com/koded0214h/janus.git
-cd janus
-uv add fastapi uvicorn httpx redis "psycopg[binary]"
-cp .env.example .env
-docker compose up -d postgres redis
-uvicorn janus.main:app --reload
+cd janus/backend
+
+cp .env.example .env                          # fill in PAYSTACK_SECRET_KEY (sk_test_... for now)
+cp recipients.example.json recipients.json    # real bank details for anyone you allow-list
+
+docker compose up -d                           # postgres + redis
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+
+uvicorn app.main:app --reload                  # tables + default policy are created on first run
 ```
 
-`.env` (test phase):
+`backend/.env` (test phase):
 
 ```env
-JANUS_MODE=test
-PAYSTACK_SECRET_KEY=sk_test_...
-FLOAT_LIMIT_NGN=2000
-DATABASE_URL=postgresql://janus:janus@localhost:5432/janus
+DATABASE_URL=postgresql+psycopg://janus:janus@localhost:5432/janus
 REDIS_URL=redis://localhost:6379/0
+PAYSTACK_SECRET_KEY=sk_test_...
+PAYSTACK_BASE_URL=https://api.paystack.co
+FLOAT_LIMIT_NGN=2000
 TELEGRAM_BOT_TOKEN=...
 TELEGRAM_CHAT_ID=...
 ```
@@ -124,6 +113,8 @@ TELEGRAM_CHAT_ID=...
 Live cutover: swap in `sk_live_...`, fund the Paystack balance with a small real float (start at ₦2,000), and pre-create your allowlisted recipients. Nothing in the gate changes.
 
 > **Honest dependency:** live Paystack transfers need a verified business and recipients created ahead of time, and may prompt an OTP depending on your settings. Sort that once, and real money is a config flip.
+
+See [`backend/README.md`](backend/README.md) for the full run-and-test guide, including the float-ceiling reset step.
 
 ## Policy example
 
@@ -142,7 +133,7 @@ Declarative JSON, evaluated top to bottom. This is your standing authorization, 
 
 ## The demo
 
-An agent runs errands. Small payouts sail through (₦150 to a known vendor). A transfer over the per-tx cap fires a Telegram ping you approve or deny in real time. A transfer to an account not on the allowlist is auto-denied with a printed reason. Hit the daily cap and everything locks. The audit log shows every decision and why, each allowed transfer carrying its real Paystack reference, and the money actually lands.
+An agent runs errands. Small payouts sail through (₦150 to a known vendor). A transfer over the approval threshold emails you a link, and the request blocks until you approve or deny it. A transfer to an account not on the allowlist is auto-denied with a printed reason. Hit the daily cap and everything locks. The audit log shows every decision and why, each allowed transfer carrying its real Paystack reference, and the money actually lands.
 
 That two-minute demo is the thesis running live: not making payments autonomous, making autonomous payments trustworthy.
 

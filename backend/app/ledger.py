@@ -157,7 +157,10 @@ class SpendLedger:
         spend_state, reserved = self._reserve_budget(intent, policy)
         decision = evaluate(intent, policy, spend_state, self._float_limit_ngn)
 
-        if decision.verdict != Verdict.ALLOW and reserved:
+        # NEEDS_APPROVAL holds its reservation — a human hasn't ruled yet, so the budget stays
+        # provisionally spent until the approval resolves (approved keeps it, denied/timeout
+        # releases it — see ApprovalService). Only an outright DENY rolls back immediately.
+        if decision.verdict == Verdict.DENY and reserved:
             self.rollback_reservation(intent)
 
         try:
@@ -183,7 +186,9 @@ class SpendLedger:
             db.refresh(decision_model)
         except IntegrityError:
             db.rollback()
-            if decision.verdict == Verdict.ALLOW and reserved:
+            # a concurrent request already won the race and holds the real reservation for
+            # this idempotency_key — this one's reservation (if any) is redundant, release it.
+            if decision.verdict != Verdict.DENY and reserved:
                 self.rollback_reservation(intent)
             existing = _find_existing(db, intent.idempotency_key)
             if existing is None:

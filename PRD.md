@@ -34,7 +34,7 @@ When an autonomous agent initiates a payment, the assumption every payment syste
 
 Every funded player (Crossmint, Skyfire, FluxA, Nevermined) is chasing global, card-network and stablecoin-first, enterprise agent commerce. None of them will seriously touch Nigerian bank rails, naira, NIP quirks, or local compliance for years. That is the wedge.
 
-Janus is built naira-first: NIP transfers, Paystack recipients, local categories (airtime, data, vendor payouts), Telegram approvals. It is the governance layer for the exact world Paystack Index is opening up on the consumer side. Paystack Index lets a Nigerian ask an AI assistant to buy airtime, send money via Zap, or order food, within permissions and spending limits. Janus is the developer-facing control layer for that same shift: the gate you put in front of your own agent.
+Janus is built naira-first: NIP transfers, Paystack recipients, local categories (airtime, data, vendor payouts), human-in-the-loop approvals (email today, Telegram/SMS documented for later). It is the governance layer for the exact world Paystack Index is opening up on the consumer side. Paystack Index lets a Nigerian ask an AI assistant to buy airtime, send money via Zap, or order food, within permissions and spending limits. Janus is the developer-facing control layer for that same shift: the gate you put in front of your own agent.
 
 The tie is not just thematic. It is the clearest local proof that agent-initiated fiat payments with spending limits are already shipping here, which makes Janus timely rather than speculative.
 
@@ -85,7 +85,7 @@ Ranked so that if any is missing, Janus is broken or dangerous, not merely incom
 2. **Atomic budget accounting.** Two concurrent intents cannot both pass a cap only one fits under. Redis atomic decrement, not read-then-write.
 3. **Hard float ceiling, enforced independently of policy.** Even a misconfigured policy cannot exceed the funded float.
 4. **Deterministic decision with a reason.** Allow / deny / needs-approval, always with a human-readable reason.
-5. **Human-in-the-loop escalation.** A real blocking approval path over Telegram, timing out to deny.
+5. **Human-in-the-loop escalation.** A real blocking approval path (email today; Telegram is a documented, stubbed channel behind the same interface), timing out to deny.
 6. **Append-only audit log.** Every decision, with reason and rail reference, never edited in place.
 
 Four of six are correctness and safety, not features. That is the tell that this is infrastructure.
@@ -139,7 +139,7 @@ decision = janus.pay(
 - **API layer (FastAPI):** intent intake plus read endpoints for policy and audit.
 - **Decision engine:** pure function of `(intent, policy, spend_state, float_limit_ngn) -> verdict`. No side effects. Most-tested part. `float_limit_ngn` is passed separately from `policy` so the hard float ceiling (§7.3) holds even when the policy itself is wrong.
 - **Spend ledger:** Redis atomic counters for daily total, velocity window, and the standing float ceiling; Postgres for the durable ledger and audit trail; idempotency keys deduplicate.
-- **Approval channel:** Telegram bot (reuse KODED OS) today; SMS is a documented later option, not yet built. Publish request, await callback, return verdict.
+- **Approval channel:** Gmail SMTP today (working); Telegram bot and SMS are documented, stubbed channels behind the same `ApprovalChannel` interface. Publish request, block until resolved or timed out, return verdict.
 - **Executor:** `PaystackExecutor` implementing the `Executor` interface — the only rail-aware piece, boxed as the "agnostic payment rail" in the architecture diagram.
 
 ## 10. Data model (sketch)
@@ -161,13 +161,13 @@ That is the whole bar. One load test, one threat model. Not multi-tenancy, not k
 
 ## 12. Milestones (time-scoped)
 
-Target: a focused weekend, roughly 10 to 14 hours, reusing the KODED OS Telegram bot.
+Target: a focused weekend, roughly 10 to 14 hours.
 
 | Phase | Deliverable | Est. | Gate to next |
 |-------|-------------|------|--------------|
 | **P0 — Core gate** | Decision engine + spend ledger + audit, unit-tested, no real payments | 3–4h | Correct and idempotent under a concurrency test |
 | **P1 — Paystack (test)** | Executor on Paystack test keys; `allowed` triggers a test transfer end to end | 2–3h | Intent → decision → test transfer → logged |
-| **P2 — Approval loop** | Telegram approval on `needs_approval`, blocking, timeout-to-deny | 2h | Over-cap intent pings phone and honors the reply |
+| **P2 — Approval loop** | Approval on `needs_approval` via email, blocking, timeout-to-deny (Telegram stubbed behind the same interface) | 2h | Over-cap intent emails a link and honors the reply |
 | **P3 — Live cutover (DoD)** | Live keys, ₦2,000 float, allowlisted recipients; real naira moves | 1–2h | A real small transfer lands, gated and logged |
 | **P4 — Harden + demo** | Load test, threat model, MCP `pay` tool, record the two-minute clip | 2–3h | Full demo runs start to finish on camera |
 
@@ -179,7 +179,7 @@ All true at once:
 
 1. An agent submits an intent and gets a decision in well under a second.
 2. A real Paystack transfer of a small naira amount, triggered by an `allowed`, lands in a real bank account.
-3. A payment above the per-tx cap triggers a Telegram approval and only proceeds on yes.
+3. A payment above the approval threshold emails a link and only proceeds on approve.
 4. A payment to a non-allowlisted recipient or over the daily cap is denied with a reason and moves no money.
 5. Every case appears in the audit log with decision, reason, and (for transfers) the Paystack reference.
 6. Replaying the same intent twice moves money at most once.
