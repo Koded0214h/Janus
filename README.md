@@ -69,6 +69,11 @@ decision = janus.pay(
 
 The mental model for the developer: give your agent a `pay` tool that physically cannot overspend.
 
+Not building an MCP-native agent? Janus is a plain REST API underneath — `POST /intents` with
+an `X-API-Key` header, callable from any language. There's a typed Python client at
+[`sdks/python/`](sdks/python/) if you don't want to write the HTTP calls by hand; everything
+else can hit the API directly.
+
 ## Trust model in one sentence
 
 Janus can only spend from a float you funded with a small amount, strictly inside rules you set, and it logs every decision, so the most it can ever cost you is the float.
