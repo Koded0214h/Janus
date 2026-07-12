@@ -135,6 +135,22 @@ approve/deny/timeout approval flow end to end.
 correctly on approve/deny, times out to deny when nobody answers, and `resolve()` is race-safe
 (first resolution wins, an already-expired row refuses a late click).
 
+## Load test
+
+`scripts/load_test.py` is the PRD §11 load test — real HTTP against a *running* server (not
+in-process), firing overlapping intents to prove zero overspend and zero double-pay:
+
+```bash
+uvicorn app.main:app --reload &          # needs a live server, unlike pytest
+python scripts/load_test.py --concurrency 30 --per-request-ngn 50
+```
+
+It reads the active policy's `per_tx_cap_ngn` first and refuses to run if `--per-request-ngn`
+exceeds it (that would test the per-tx-cap check instead of the daily-cap race). Assertions are
+upper-bound, not exact-count — if the velocity limit binds before the daily cap does, that's
+still a pass, since the property being proven is "never overspend," not "the daily cap is
+always what stops it."
+
 ## What's not here yet
 
 - A real Telegram bot — `TelegramApprovalChannel` is a stub; email is the only working

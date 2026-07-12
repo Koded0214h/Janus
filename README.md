@@ -52,7 +52,7 @@ This list exists so the project never spirals into four products again.
 
 ## The one call a developer makes
 
-The agent never calls Paystack. It calls Janus, ideally as a single MCP tool named `pay`, so any agent framework picks it up as a tool the LLM can invoke.
+The agent never calls Paystack. It calls Janus as a single MCP tool named `pay` ([`mcp_server/`](mcp_server/) — point Claude Desktop, Claude Code, or any MCP-compatible agent framework at it as a stdio server), so any agent picks up a payment tool with the guardrails already inside.
 
 ```python
 decision = janus.pay(
@@ -62,7 +62,9 @@ decision = janus.pay(
     reason="Groundnut supplier, order #A12",
     idempotency_key="order-A12-payout",
 )
-# decision.status -> "allowed" | "denied" | "needs_approval"
+# decision["status"] -> "allowed" | "denied"
+# ("needs_approval" never actually reaches the caller — the call already blocked until a
+#  human resolved it, so you always get a final answer, not a pending state)
 ```
 
 The mental model for the developer: give your agent a `pay` tool that physically cannot overspend.
@@ -139,7 +141,18 @@ That two-minute demo is the thesis running live: not making payments autonomous,
 
 ## Scale and security, kept honest
 
-"Built for scale" here means the decision path is stateless and the ledger stays correct under concurrent load, proven with one load test. "Secure" means the float cap holds independently of policy, secrets live only in env, and the audit log cannot be edited in place, backed by one short threat model in the docs. It does not mean multi-tenancy, dashboards, or a pile of infra nobody asked for. The scalable, secure version of Janus is still just the gate.
+"Built for scale" here means the decision path is stateless and the ledger stays correct under concurrent load, proven with one load test ([`backend/scripts/load_test.py`](backend/scripts/load_test.py) — fires overlapping intents at a live server and proves zero overspend and zero double-pays). "Secure" means the float cap holds independently of policy, secrets live only in env, and the audit log cannot be edited in place, backed by the short threat model below. It does not mean multi-tenancy, dashboards, or a pile of infra nobody asked for. The scalable, secure version of Janus is still just the gate.
+
+## Threat model
+
+Four threats, each with the mitigation actually implemented, not just planned.
+
+| Threat | Attack | Mitigation |
+|---|---|---|
+| **Rogue or manipulated agent** | A compromised or prompt-injected agent tries to overpay, pay the wrong party, or spam payments. | Recipient allowlist and category allowlist deny anything not pre-approved; a per-transaction cap and an approval threshold force human sign-off above a size you set; a velocity limit caps how many payments can go through in a time window. All four are policy, evaluated the same way every time — see `decision_engine.py`. |
+| **Replayed request** | A network retry, a bug, or a malicious actor resubmits the same payment intent. | Every intent carries an `idempotency_key`, enforced by a Postgres unique constraint. A replay looks up and returns the original stored decision — it is never re-evaluated, and money is never moved twice. See `ledger.py`. |
+| **Leaked key** | The Paystack secret key, DB credentials, or SMTP password leak. | The hard float ceiling caps total possible loss at `FLOAT_LIMIT_NGN` regardless of what an attacker holding the key could otherwise authorize — it's enforced in the same atomic Redis reservation as every other spend check, independent of anything a leaked credential could touch. Secrets live only in `.env` (gitignored, never committed); rotate on any suspicion. |
+| **Misconfigured policy** | An operator mistake sets `daily_cap_ngn` or `per_tx_cap_ngn` far above what's actually funded. | The float ceiling is checked separately from `policy` in the decision engine's own signature — a bad policy value literally cannot authorize more than the real funded float. Proven under concurrency in `tests/test_ledger_concurrency.py` with a deliberately reckless policy. |
 
 ## Status
 
