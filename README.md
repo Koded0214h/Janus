@@ -26,9 +26,9 @@ Janus is a paying proxy with a policy gate in front of it. An agent hands Janus 
 
 Three things make it real rather than a toy:
 
-1. **It moves real money.** Payments settle as real naira bank transfers through Paystack. Not mocked, not simulated.
+1. **It's built to move real money, not simulate it.** The executor calls Paystack's actual Transfers API — not a mock — and settles as a real naira bank transfer once a live key is in place. Current status is precise: real Paystack API calls in **test mode**, verified end to end (account resolution, OTP flow, reconciliation); live cutover is pending account verification, not code.
 2. **The blast radius is capped by design.** The agent never touches your main account. Janus disburses only from a small pre-funded float, so the worst case is the float, not your money.
-3. **The correctness layer is the point.** Atomic budget accounting, idempotency keys, and a clean decision state machine are what let real money move safely under retries and concurrency. That is the interesting engineering.
+3. **The correctness layer is the point.** Atomic budget accounting, idempotency keys, and a clean decision state machine are what let money move safely under retries and concurrency, live or test — that's the interesting engineering, and it's the part that's fully proven today.
 
 ## What Janus is NOT
 
@@ -158,7 +158,7 @@ Five threats, each with the mitigation actually implemented, not just planned.
 | Threat | Attack | Mitigation |
 |---|---|---|
 | **Rogue or manipulated agent** | A compromised or prompt-injected agent tries to overpay, pay the wrong party, or spam payments. | Recipient allowlist and category allowlist deny anything not pre-approved; a per-transaction cap and an approval threshold force human sign-off above a size you set; a velocity limit caps how many payments can go through in a time window. All four are policy, evaluated the same way every time — see `decision_engine.py`. |
-| **Replayed request** | A network retry, a bug, or a malicious actor resubmits the same payment intent. | Every intent carries an `idempotency_key`, enforced by a Postgres unique constraint. A replay looks up and returns the original stored decision — it is never re-evaluated, and money is never moved twice. See `ledger.py`. |
+| **Replayed request** | A network retry, a bug, or a malicious actor resubmits the same payment intent — including the harder case where Janus itself crashes between calling Paystack and recording the result locally. | Every intent carries an `idempotency_key`, enforced by a Postgres unique constraint — a replay looks up and returns the original decision, never re-evaluated. The same key is sent to Paystack as its own `reference`, and Paystack rejects a reused one outright (verified live: `duplicate_transfer_reference`). If a replay finds a decision but no local receipt, Janus asks Paystack what it knows before ever re-executing — reconciles if found, only executes fresh if the rail has no record either. See `ledger.py` and `executors/paystack.py`'s `find_by_reference`. |
 | **Leaked key** | The Paystack secret key, DB credentials, or SMTP password leak. | The hard float ceiling caps total possible loss at `FLOAT_LIMIT_NGN` regardless of what an attacker holding the key could otherwise authorize — it's enforced in the same atomic Redis reservation as every other spend check, independent of anything a leaked credential could touch. Secrets live only in `.env` (gitignored, never committed); rotate on any suspicion. |
 | **Misconfigured policy** | An operator mistake sets `daily_cap_ngn` or `per_tx_cap_ngn` far above what's actually funded. | The float ceiling is checked separately from `policy` in the decision engine's own signature — a bad policy value literally cannot authorize more than the real funded float. Proven under concurrency in `tests/test_ledger_concurrency.py` with a deliberately reckless policy. |
 | **Unauthenticated access to the gate itself** | Anyone who can reach the server calls `/intents` directly, no credential needed, and spends within whatever the policy allows. | Every route except `/health` and the token-based `/approvals/{token}/*` links requires an `X-API-Key` header matching `API_KEY`. An unset key fails closed — every request is rejected, never silently let through. See `app/auth.py`. |
@@ -169,4 +169,4 @@ Deliberate rebuild. Full spec, milestones, and notes in [PRD.md](./PRD.md). A [K
 
 ## Disclaimer
 
-Janus moves real funds through a live payment provider. Experimental software, not financial or security advice. Small float, keys out of git, and remember that bank transfers are not easily reversed.
+Janus is built to move real funds through a live payment provider once cut over to live keys — today it's real Paystack API calls in test mode. Experimental software, not financial or security advice. Small float, keys out of git, and remember that bank transfers are not easily reversed once live.

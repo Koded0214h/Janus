@@ -17,8 +17,15 @@ services:
 
   redis:
     image: redis:7-alpine
+    # AOF persistence, fsync on every write — janus:spend:float_total is the hard,
+    # non-negotiable ceiling (PRD §7.3); losing it to an unpersisted restart would silently
+    # reset it to 0, defeating the whole point. `everysec` (Redis's own default once AOF is
+    # on) would be fine for most data; this one's worth the extra fsync cost.
+    command: redis-server --appendonly yes --appendfsync always
     ports:
       - "6379:6379"
+    volumes:
+      - janus_redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -27,3 +34,4 @@ services:
 
 volumes:
   janus_postgres_data:
+  janus_redis_data:
