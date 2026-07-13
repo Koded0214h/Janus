@@ -7,6 +7,7 @@ idle-in-transaction for that whole span is worth avoiding even at MVP scale.
 """
 
 import secrets
+import threading
 import time
 from datetime import UTC, datetime, timedelta
 
@@ -20,6 +21,10 @@ from app.models import ApprovalModel, DecisionModel
 DEFAULT_POLL_INTERVAL_SECONDS = 1.0
 
 
+class ApprovalCapacityExceededError(RuntimeError):
+    pass
+
+
 class ApprovalService:
     def __init__(
         self,
@@ -28,38 +33,46 @@ class ApprovalService:
         base_url: str,
         timeout_seconds: int,
         poll_interval_seconds: float = DEFAULT_POLL_INTERVAL_SECONDS,
+        max_pending_waiters: int = 100,
     ):
         self._channel = channel
         self._session_factory = session_factory
         self._base_url = base_url.rstrip("/")
         self._timeout_seconds = timeout_seconds
         self._poll_interval_seconds = poll_interval_seconds
+        self._wait_slots = threading.BoundedSemaphore(max_pending_waiters)
 
     def request_and_wait(self, db: Session, decision_model: DecisionModel, intent: PaymentIntent) -> ApprovalOutcome:
-        token = secrets.token_urlsafe(24)
-        expires_at = datetime.now(UTC) + timedelta(seconds=self._timeout_seconds)
+        if not self._wait_slots.acquire(blocking=False):
+            raise ApprovalCapacityExceededError("too many approval requests are already waiting")
 
-        approval = ApprovalModel(
-            decision_id=decision_model.id,
-            token=token,
-            status=ApprovalOutcome.PENDING,
-            channel=self._channel.name,
-            expires_at=expires_at,
-        )
-        db.add(approval)
-        db.commit()
-        db.refresh(approval)
+        try:
+            token = secrets.token_urlsafe(24)
+            expires_at = datetime.now(UTC) + timedelta(seconds=self._timeout_seconds)
 
-        request = ApprovalRequest(
-            token=token,
-            intent=intent,
-            decision_reason=decision_model.reason,
-            review_url=f"{self._base_url}/approvals/{token}",
-            expires_at=expires_at,
-        )
-        self._channel.notify(request)
+            approval = ApprovalModel(
+                decision_id=decision_model.id,
+                token=token,
+                status=ApprovalOutcome.PENDING,
+                channel=self._channel.name,
+                expires_at=expires_at,
+            )
+            db.add(approval)
+            db.commit()
+            db.refresh(approval)
 
-        return self._wait_for_resolution(approval.id, expires_at)
+            request = ApprovalRequest(
+                token=token,
+                intent=intent,
+                decision_reason=decision_model.reason,
+                review_url=f"{self._base_url}/approvals/{token}",
+                expires_at=expires_at,
+            )
+            self._channel.notify(request)
+
+            return self._wait_for_resolution(approval.id, expires_at)
+        finally:
+            self._wait_slots.release()
 
     def _wait_for_resolution(self, approval_id: int, expires_at: datetime) -> ApprovalOutcome:
         while datetime.now(UTC) < expires_at:

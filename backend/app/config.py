@@ -24,6 +24,7 @@ class Settings(BaseSettings):
 
     approval_channel: str = "email"  # "email" | "telegram" (telegram is a stub, see approvals/telegram_channel.py)
     approval_timeout_seconds: int = 300
+    approval_max_pending_waiters: int = 100
 
     smtp_host: str = "smtp.gmail.com"
     smtp_port: int = 587

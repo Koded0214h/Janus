@@ -13,7 +13,7 @@ from decimal import Decimal
 from sqlalchemy.orm import sessionmaker
 
 from app.approvals.base import ApprovalChannel, ApprovalRequest
-from app.approvals.service import ApprovalService, resolve
+from app.approvals.service import ApprovalCapacityExceededError, ApprovalService, resolve
 from app.domain import ApprovalOutcome, PaymentIntent, Verdict
 from app.models import ApprovalModel, DecisionModel, IntentModel
 
@@ -135,6 +135,53 @@ def test_times_out_to_deny_when_nobody_answers(db, engine):
     approval = db.query(ApprovalModel).filter_by(token=channel.sent[0].token).one()
     assert approval.status == ApprovalOutcome.EXPIRED
     assert approval.resolved_at is not None
+
+
+def test_wait_capacity_limit_raises_immediately(db, engine):
+    channel = FakeChannel()
+    service = ApprovalService(
+        channel=channel,
+        session_factory=sessionmaker(bind=engine),
+        base_url="http://localhost:8000",
+        timeout_seconds=5,
+        poll_interval_seconds=0.05,
+        max_pending_waiters=1,
+    )
+    first_decision = _make_decision(db)
+    second_decision = _make_decision(db)
+    first_intent = PaymentIntent(
+        amount_ngn=Decimal("750"), recipient="rider_1", category="delivery", reason="test", idempotency_key="cap-1"
+    )
+    second_intent = PaymentIntent(
+        amount_ngn=Decimal("750"), recipient="rider_1", category="delivery", reason="test", idempotency_key="cap-2"
+    )
+
+    started = threading.Event()
+    first_outcome = {}
+
+    def wait_on_first_request():
+        started.set()
+        first_outcome["outcome"] = service.request_and_wait(db, first_decision, first_intent)
+
+    worker = threading.Thread(target=wait_on_first_request)
+    worker.start()
+    started.wait(timeout=1)
+
+    while not channel.sent:
+        time.sleep(0.02)
+
+    try:
+        try:
+            service.request_and_wait(db, second_decision, second_intent)
+            assert False, "expected approval capacity error"
+        except ApprovalCapacityExceededError:
+            pass
+    finally:
+        with sessionmaker(bind=engine)() as resolver_db:
+            resolve(resolver_db, channel.sent[0].token, ApprovalOutcome.DENIED)
+        worker.join()
+
+    assert first_outcome["outcome"] == ApprovalOutcome.DENIED
 
 
 def test_resolve_is_race_safe_only_first_call_wins(db):
