@@ -71,7 +71,56 @@ class PaystackExecutor(Executor):
         return TransferResult(
             success=True,
             rail="paystack",
-            reference=data.get("reference") or intent.idempotency_key,
+            # transfer_code, not data["reference"] — the latter just echoes back the
+            # idempotency_key we sent. transfer_code is Paystack's own identifier, and it's
+            # what /transfer/finalize_transfer and /transfer/:id_or_code actually need.
+            reference=data.get("transfer_code") or intent.idempotency_key,
+            status=data.get("status", "unknown"),
+            raw_message=body.get("message", ""),
+        )
+
+    def find_by_reference(self, reference: str) -> TransferResult | None:
+        """GET /transfer?reference=X — empirically verified to filter server-side (confirmed
+        live: a nonexistent reference returns an empty list, a real one returns exactly that
+        transfer), not just accept-and-ignore the param. This is the reconciliation path: if
+        Janus crashed between initiating a transfer and persisting the local receipt, this is
+        how a retry finds out what actually happened at Paystack instead of guessing."""
+        response = self._client.get("/transfer", params={"reference": reference})
+        body = response.json()
+        if response.status_code >= 400 or not body.get("status") or not body.get("data"):
+            return None
+
+        data = body["data"][0]
+        return TransferResult(
+            success=True,
+            rail="paystack",
+            reference=data.get("transfer_code") or reference,
+            status=data.get("status", "unknown"),
+            raw_message="reconciled from Paystack transfer history",
+        )
+
+    def finalize_transfer(self, transfer_code: str, otp: str) -> TransferResult:
+        """Completes a transfer stuck in "otp" state — needed when the receiving Paystack
+        account has OTP-for-transfers enabled. This is an account security setting on
+        Paystack's side, not something Janus's decision engine or ledger has any say over;
+        by the time this is called, the payment was already authorized and the budget
+        already spent — this only finishes settling money that's already been committed to."""
+        response = self._client.post("/transfer/finalize_transfer", json={"transfer_code": transfer_code, "otp": otp})
+        body = response.json()
+        if response.status_code >= 400 or not body.get("status"):
+            return TransferResult(
+                success=False,
+                rail="paystack",
+                reference=transfer_code,
+                status="failed",
+                raw_message=body.get("message", f"finalize failed with HTTP {response.status_code}"),
+            )
+
+        data = body["data"]
+        return TransferResult(
+            success=True,
+            rail="paystack",
+            reference=data.get("transfer_code", transfer_code),
             status=data.get("status", "unknown"),
             raw_message=body.get("message", ""),
         )

@@ -1,6 +1,6 @@
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
 
@@ -20,6 +20,10 @@ from tests.test_approvals import FakeChannel
 @dataclass
 class FakeExecutor(Executor):
     should_succeed: bool = True
+    reconciled_result: TransferResult | None = None
+    """What find_by_reference() returns — None means "the rail has no record of this",
+    the default for every test that isn't specifically exercising reconciliation."""
+    find_by_reference_calls: list[str] = field(default_factory=list)
 
     def execute(self, intent: PaymentIntent) -> TransferResult:
         if self.should_succeed:
@@ -27,6 +31,10 @@ class FakeExecutor(Executor):
                 success=True, rail="paystack", reference=f"ref-{intent.idempotency_key}", status="success", raw_message="ok"
             )
         return TransferResult(success=False, rail="paystack", reference=None, status="failed", raw_message="declined")
+
+    def find_by_reference(self, reference: str) -> TransferResult | None:
+        self.find_by_reference_calls.append(reference)
+        return self.reconciled_result
 
 
 def _seed_policy(db, approval_threshold_ngn: str = "100000"):
@@ -295,3 +303,131 @@ def test_intents_route_actually_requires_the_api_key(db, ledger):
     assert no_key_response.status_code == 401
     assert wrong_key_response.status_code == 401
     assert right_key_response.status_code == 200
+
+
+def _simulate_crashed_dual_write(db, ledger, policy, idempotency_key: str, amount: str = "100"):
+    """Reproduces the exact crash a reviewer flagged: the ledger reserves budget and commits
+    an ALLOW decision, then the process dies before the executor call is ever made (or before
+    its result is persisted) — leaving an Intent + Decision row with no Transfer row."""
+    intent = PaymentIntent(
+        amount_ngn=Decimal(amount),
+        recipient="rider_1",
+        category="delivery",
+        reason="crash simulation",
+        idempotency_key=idempotency_key,
+    )
+    result = ledger.process_intent(db, intent, policy)
+    assert result.decision.verdict.value == "allow"
+    assert result.is_replay is False
+    return result
+
+
+def test_replay_reconciles_a_transfer_the_rail_actually_completed(db, ledger, policy):
+    """The dual-write crash: rail call succeeded, local receipt never got persisted. A retry
+    must ask the rail what actually happened — not silently report nothing, and not blindly
+    re-call execute() (that would risk a double-pay if the rail didn't dedupe)."""
+    _simulate_crashed_dual_write(db, ledger, policy, "reconcile-found-1")
+
+    fake_executor = FakeExecutor(
+        reconciled_result=TransferResult(
+            success=True, rail="paystack", reference="TRF_reconciled", status="success", raw_message="ok"
+        )
+    )
+    app.dependency_overrides[get_db] = lambda: db
+    app.dependency_overrides[get_ledger] = lambda: ledger
+    app.dependency_overrides[get_executor] = lambda: fake_executor
+    app.dependency_overrides[require_api_key] = lambda: None
+    client = TestClient(app)
+
+    response = client.post(
+        "/intents",
+        json={
+            "amount_ngn": "100",
+            "recipient": "rider_1",
+            "category": "delivery",
+            "reason": "crash simulation",
+            "idempotency_key": "reconcile-found-1",
+        },
+    )
+    app.dependency_overrides.clear()
+
+    body = response.json()
+    assert body["status"] == "allowed"
+    assert body["receipt"]["rail_reference"] == "TRF_reconciled"
+    assert body["receipt"]["status"] == "success"
+    # the whole point: never blindly re-execute when reconciliation finds an answer
+    assert fake_executor.find_by_reference_calls == ["reconcile-found-1"]
+
+
+def test_replay_executes_fresh_when_the_rail_never_saw_it(db, ledger, policy):
+    """If the rail has no record either, the crash happened before the call ever landed —
+    safe to execute for real now (the deterministic reference protects against any race)."""
+    _simulate_crashed_dual_write(db, ledger, policy, "reconcile-missing-1")
+
+    fake_executor = FakeExecutor(should_succeed=True, reconciled_result=None)
+    app.dependency_overrides[get_db] = lambda: db
+    app.dependency_overrides[get_ledger] = lambda: ledger
+    app.dependency_overrides[get_executor] = lambda: fake_executor
+    app.dependency_overrides[require_api_key] = lambda: None
+    client = TestClient(app)
+
+    response = client.post(
+        "/intents",
+        json={
+            "amount_ngn": "100",
+            "recipient": "rider_1",
+            "category": "delivery",
+            "reason": "crash simulation",
+            "idempotency_key": "reconcile-missing-1",
+        },
+    )
+    app.dependency_overrides.clear()
+
+    body = response.json()
+    assert body["status"] == "allowed"
+    assert body["receipt"]["rail_reference"] == "ref-reconcile-missing-1"  # FakeExecutor.execute()'s output
+    assert fake_executor.find_by_reference_calls == ["reconcile-missing-1"]  # checked first
+
+
+def test_paystack_executor_find_by_reference_returns_none_for_unknown_reference():
+    """Real HTTP call shape check against a fake transport — the live behavior (Paystack
+    genuinely filters by reference server-side) was verified manually against the real API."""
+    import httpx
+
+    from app.config import Settings
+    from app.executors.paystack import PaystackExecutor
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.params["reference"] == "nope"
+        return httpx.Response(200, json={"status": True, "message": "Transfers retrieved", "data": []})
+
+    client = httpx.Client(base_url="http://testserver", transport=httpx.MockTransport(handler))
+    executor = PaystackExecutor(Settings(paystack_secret_key="sk_test_x"), client=client)
+
+    assert executor.find_by_reference("nope") is None
+
+
+def test_paystack_executor_find_by_reference_returns_the_transfer_when_found():
+    import httpx
+
+    from app.config import Settings
+    from app.executors.paystack import PaystackExecutor
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "status": True,
+                "message": "Transfers retrieved",
+                "data": [{"transfer_code": "TRF_abc123", "status": "success", "reference": "found-me"}],
+            },
+        )
+
+    client = httpx.Client(base_url="http://testserver", transport=httpx.MockTransport(handler))
+    executor = PaystackExecutor(Settings(paystack_secret_key="sk_test_x"), client=client)
+
+    result = executor.find_by_reference("found-me")
+
+    assert result is not None
+    assert result.reference == "TRF_abc123"
+    assert result.status == "success"

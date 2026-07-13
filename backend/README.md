@@ -11,6 +11,8 @@ the full spec — this is just how to run it.
 - `app/ledger.py` — atomic budget reservation (Redis Lua script) + durable, idempotent
   persistence (Postgres unique constraint on `idempotency_key`).
 - `app/executors/paystack.py` — creates a Paystack transfer recipient and initiates a transfer.
+  `find_by_reference()` reconciles against Paystack's own records when the local receipt is
+  missing (see "Idempotency across the rail boundary" below) — every `Executor` must implement it.
 - `app/approvals/` — the human-in-the-loop escalation for `needs_approval` verdicts. `email_channel.py`
   is real (Gmail SMTP); `telegram_channel.py` is a stub (see below).
 - `app/auth.py` — a single shared-secret header (`X-API-Key`) required on every route except
@@ -65,6 +67,35 @@ Paystack balance, reset it by hand:
 ```bash
 docker compose exec redis redis-cli DEL janus:spend:float_total
 ```
+
+Redis runs with AOF persistence and a named volume (`docker-compose.yml`), `appendfsync always`
+— this counter is the non-negotiable ceiling, and it needs to survive a container restart, not
+silently reset to 0 and defeat the whole point. Verified: a value written, the container fully
+removed and recreated, the value was still there.
+
+## Idempotency across the rail boundary
+
+The unique constraint on `idempotency_key` makes replay detection inside Janus airtight, but
+there's a second failure mode: the process can die *between* a successful Paystack call and the
+local commit that records it (a dual write, across a network boundary — no transaction spans
+both). Two things close this together:
+
+1. **A deterministic reference.** Every `POST /transfer` call sends `reference:
+   intent.idempotency_key`. Verified live against the real API: calling `/transfer` twice with
+   the same reference gets `duplicate_transfer_reference` from Paystack itself — so even a bug
+   that caused Janus to retry the rail call blind could not cause a second real transfer.
+2. **Reconciliation on replay.** If a replayed intent resolves to `allowed` but has no local
+   `TransferModel` row, Janus does not silently report nothing and does not blindly re-execute —
+   it calls `executor.find_by_reference(idempotency_key)` first. If the rail has a record
+   (`GET /transfer?reference=X`, verified to filter server-side, not just accept-and-ignore the
+   param), the local receipt is healed to match it. Only if the rail has no record either
+   (meaning the original call never landed) does Janus execute for real — safe, because the
+   deterministic reference is still the backstop if there's ever a same-instant race.
+
+Verified live end to end: a transfer was initiated directly against Paystack (simulating the
+crash — Janus never recorded it locally), then the same `idempotency_key` was replayed through
+the real API. Janus found the transfer, healed the local record with the real `transfer_code`,
+and the audit log now shows it — no data loss, no re-initiation.
 
 ## The approval loop
 
@@ -156,8 +187,9 @@ branch (a payment denied by the ceiling even under a deliberately generous/misco
 asserts the daily cap and float ceiling are never exceeded and duplicate idempotency keys never
 double-spend, even under a race.
 `tests/test_api_intents.py` — full `POST /intents` path with a fake executor, covering the
-success/failure/replay budget-reservation lifecycle, the float-ceiling denial path, and the
-approve/deny/timeout approval flow end to end.
+success/failure/replay budget-reservation lifecycle, the float-ceiling denial path, the
+approve/deny/timeout approval flow, and the rail-boundary reconciliation crash (simulates a
+missing local receipt and asserts Janus checks the rail before ever re-executing).
 `tests/test_approvals.py` — `ApprovalService` in isolation: the blocking wait resolves
 correctly on approve/deny, times out to deny when nobody answers, and `resolve()` is race-safe
 (first resolution wins, an already-expired row refuses a late click).
@@ -181,6 +213,21 @@ upper-bound, not exact-count — if the velocity limit binds before the daily ca
 still a pass, since the property being proven is "never overspend," not "the daily cap is
 always what stops it."
 
+## Finishing an OTP-pending transfer
+
+Some Paystack accounts have OTP-for-transfers enabled — an account security setting, not
+anything Janus's decision engine or ledger controls. When that's on, a `receipt.status` of
+`"otp"` means the transfer was authorized and initiated for real, but Paystack is holding it
+for a one-time code sent to the account owner. `scripts/finalize_transfer.py` completes it once
+you have that code, and updates the local `TransferModel` row to match:
+
+```bash
+python scripts/finalize_transfer.py --idempotency-key demo-1 --otp 123456
+```
+
+This has been run against the real Paystack API end to end: transfer authorized → `otp` →
+finalized → `success`, independently confirmed via Paystack's own `GET /transfer/:code`.
+
 ## What's not here yet
 
 - A real Telegram bot — `TelegramApprovalChannel` is a stub; email is the only working
@@ -189,5 +236,6 @@ always what stops it."
   lifetime; editing it requires a restart to take effect.
 - Alembic migrations — tables are created via `Base.metadata.create_all()` on startup. Fine
   for one operator; swap in `alembic/` before this has more than one deployment target.
-- Live cutover (P3) — blocked on Paystack's OTP-for-transfers setting on the test account
-  currently in use, not on anything in this codebase.
+- Fully automatic live cutover — a transfer on an OTP-enabled account still needs a human to
+  relay the one-time code once per transfer (see above). Not a gap in Janus; that's Paystack's
+  own account-level security control.

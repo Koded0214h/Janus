@@ -35,9 +35,19 @@ def submit_intent(
     decision_id = result.decision_model.id
 
     if result.is_replay:
-        receipt = _existing_receipt(db, decision_id)
         approval = _existing_approval(db, decision_id)
         status, reason = _final_status_and_reason(result.decision, approval)
+        receipt = _existing_receipt(db, decision_id)
+        if receipt is None and status == "allowed":
+            # Local receipt is missing but the decision resolved to allowed — this is the
+            # dual-write crash window (rail call succeeded, process died before the local
+            # commit). Never re-call execute() blind: check what the rail itself knows first.
+            receipt = _reconcile_and_record(db, executor, intent, decision_id)
+            if receipt is None:
+                # The rail has no record either — our call never landed there. Safe to
+                # execute for real now; the deterministic reference means even a same-instant
+                # race with a not-yet-visible prior attempt fails safe at the rail, not ours.
+                receipt = _execute_and_record(db, ledger, executor, intent, decision_id)
     elif result.decision.verdict == Verdict.ALLOW:
         receipt = _execute_and_record(db, ledger, executor, intent, decision_id)
         status, reason = "allowed", result.decision.reason
@@ -97,6 +107,27 @@ def _execute_and_record(
         amount_ngn=intent.amount_ngn,
         status=transfer_result.status,
     )
+
+
+def _reconcile_and_record(db: Session, executor: Executor, intent: PaymentIntent, decision_id: int) -> Receipt | None:
+    """Asks the rail what it knows about intent.idempotency_key (the deterministic reference
+    every execute() call uses) and heals the local record if the rail has an answer. Returns
+    None only if the rail has no record at all — meaning it's genuinely safe to execute fresh."""
+    found = executor.find_by_reference(intent.idempotency_key)
+    if found is None:
+        return None
+
+    transfer_model = TransferModel(
+        decision_id=decision_id,
+        rail=found.rail,
+        rail_reference=found.reference,
+        status=found.status,
+        amount_ngn=intent.amount_ngn,
+    )
+    db.add(transfer_model)
+    db.commit()
+
+    return Receipt(rail=found.rail, rail_reference=found.reference, amount_ngn=intent.amount_ngn, status=found.status)
 
 
 def _existing_receipt(db: Session, decision_id: int) -> Receipt | None:
