@@ -273,6 +273,62 @@ def test_needs_approval_times_out_to_deny(db, ledger, engine, redis_client):
     assert redis_client.get(key) in (None, "0")
 
 
+def test_approval_queue_limit_fails_fast_and_releases_the_budget(db, ledger, engine, redis_client):
+    _seed_policy(db, approval_threshold_ngn="100")
+    channel = FakeChannel()
+    service = ApprovalService(
+        channel=channel,
+        session_factory=sessionmaker(bind=engine),
+        base_url="http://localhost:8000",
+        timeout_seconds=5,
+        poll_interval_seconds=0.05,
+        max_pending_waiters=1,
+    )
+    client = client_with_executor(db, ledger, should_succeed=True, approval_service=service)
+
+    def first_request():
+        return client.post(
+            "/intents",
+            json={
+                "amount_ngn": "750",
+                "recipient": "rider_1",
+                "category": "delivery",
+                "reason": "first waiting request",
+                "idempotency_key": "api-approval-capacity-1",
+            },
+        )
+
+    first_response_holder = {}
+    worker = threading.Thread(target=lambda: first_response_holder.setdefault("response", first_request()))
+    worker.start()
+
+    while not channel.sent:
+        time.sleep(0.02)
+
+    second_response = client.post(
+        "/intents",
+        json={
+            "amount_ngn": "750",
+            "recipient": "rider_1",
+            "category": "delivery",
+            "reason": "second waiting request",
+            "idempotency_key": "api-approval-capacity-2",
+        },
+    )
+
+    with sessionmaker(bind=engine)() as resolver_db:
+        resolve(resolver_db, channel.sent[0].token, ApprovalOutcome.DENIED)
+    worker.join()
+    app.dependency_overrides.clear()
+
+    assert second_response.status_code == 503
+    assert "too many approval requests" in second_response.json()["detail"]
+
+    key = ledger._daily_key(datetime.now(UTC).date())
+    assert redis_client.get(key) in (None, "0")
+    assert first_response_holder["response"].status_code == 200
+
+
 def test_intents_route_actually_requires_the_api_key(db, ledger):
     """Unlike every other test here, this one does NOT override require_api_key — the point
     is to prove the real app rejects unauthenticated requests, not just that the dependency

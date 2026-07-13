@@ -8,7 +8,6 @@ directory entry, which will fail loudly at execution time rather than silently m
 
 import json
 from dataclasses import dataclass
-from functools import lru_cache
 from pathlib import Path
 
 RECIPIENTS_FILE = Path(__file__).resolve().parent.parent / "recipients.json"
@@ -21,7 +20,6 @@ class RecipientDetails:
     bank_code: str
 
 
-@lru_cache
 def _load() -> dict[str, RecipientDetails]:
     if not RECIPIENTS_FILE.exists():
         return {}

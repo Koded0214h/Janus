@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.approvals.service import ApprovalService
+from app.approvals.service import ApprovalCapacityExceededError, ApprovalService
 from app.auth import require_api_key
 from app.decision_engine import Verdict
 from app.deps import get_approval_service, get_db, get_executor, get_ledger
@@ -55,7 +55,11 @@ def submit_intent(
         receipt = None
         status, reason = "denied", result.decision.reason
     else:
-        outcome = approval_service.request_and_wait(db, result.decision_model, intent)
+        try:
+            outcome = approval_service.request_and_wait(db, result.decision_model, intent)
+        except ApprovalCapacityExceededError as exc:
+            ledger.rollback_reservation(intent)
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
         db.expire_all()  # the wait ran on separate sessions — force a fresh read of our rows
 
         if outcome == ApprovalOutcome.APPROVED:
